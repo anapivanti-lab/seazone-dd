@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Due Diligence de Franquias — Seazone</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Due Diligence de Franquias</h1>
+    <p class="sub">Emissão automática de certidões — Seazone Jurídico</p>
+  </header>
+
+  <main>
+    <form id="form">
+      <div class="linha">
+        <label>Tipo
+          <select name="tipo" id="tipo">
+            <option value="PJ">Franquia (CNPJ)</option>
+            <option value="PF">Operador / Representante (CPF)</option>
+          </select>
+        </label>
+        <label class="cresce">Nome / Razão social
+          <input name="nome" placeholder="Ex.: Fulano Imóveis Ltda">
+        </label>
+      </div>
+      <div class="linha">
+        <label class="cresce">CNPJ / CPF
+          <input name="documento" id="documento" placeholder="Somente números" required>
+        </label>
+        <label class="uf">UF
+          <input name="uf" placeholder="SC" maxlength="2">
+        </label>
+        <label class="cresce">Município
+          <input name="municipio" placeholder="Florianópolis">
+        </label>
+      </div>
+      <button type="submit">Iniciar emissão</button>
+    </form>
+
+    <section id="painel" hidden>
+      <h2>Andamento <span id="estado" class="tag"></span></h2>
+      <p class="dica">⏳ Quando aparecer um <b>captcha</b> na janela do navegador que abriu,
+        resolva e clique em consultar/emitir. O sistema captura o PDF sozinho e passa para a próxima.</p>
+      <table id="tabela">
+        <thead><tr><th>Status</th><th>Certidão</th><th>Observação</th><th>PDF</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="pasta" class="pasta"></p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

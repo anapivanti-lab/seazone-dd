@@ -1,0 +1,12 @@
+# Ambiente Python
+.venv/
+__pycache__/
+*.pyc
+
+# Dados sensíveis (certidões e processos de pessoas reais) — NÃO versionar
+dados/saida/
+dados/processos/
+
+# Configurações locais
+.env
+*.log
