@@ -63,8 +63,10 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
     ctx.pasta_saida = preparar_pasta(ctx)
     passos = []
     for it in itens_para(ctx):
-        status = "manual" if it.modo == "manual" else "aguardando"
-        msg = "Obtenha o documento e suba o PDF aqui." if it.modo == "manual" else ""
+        if it.modo == "manual":
+            status, msg = "manual", (it.obs or "Obtenha o documento e suba o PDF aqui.")
+        else:
+            status, msg = "aguardando", ""
         passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url, status=status, mensagem=msg))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     JOBS[job.id] = job
@@ -116,13 +118,18 @@ async def executar_job(job: Job) -> None:
     # 1) "Abrir no navegador normal": sem detecção de robô; copia o documento.
     if abrir_items:
         _copiar_clipboard(job.ctx.documento)
+        ja_aberto = set()
         for passo in abrir_items:
             try:
-                if passo.url:
+                if passo.url and passo.url not in ja_aberto:
                     os.startfile(passo.url)  # abre no navegador padrão (Windows)
+                    ja_aberto.add(passo.url)
+                    passo.mensagem = ("Abri no seu navegador. Valide o captcha, baixe o PDF e clique em "
+                                      "Enviar PDF. (O CNPJ/CPF já está copiado — é só colar.)")
+                else:
+                    passo.mensagem = ("Mesma página já aberta — uma certidão pode cobrir mais de um item. "
+                                      "Baixe e suba o PDF aqui.")
                 passo.status = "aberta"
-                passo.mensagem = ("Abri no seu navegador. Valide o captcha, baixe o PDF e clique em "
-                                  "Enviar PDF. (O CNPJ/CPF já está copiado — é só colar.)")
             except Exception as e:
                 passo.status = "erro"
                 passo.mensagem = f"Não consegui abrir a página: {e}"

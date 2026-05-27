@@ -58,12 +58,17 @@ function render(itens, comJob) {
 
 // Prévia da checklist completa, já na abertura da página
 async function carregarChecklist() {
-  const r = await fetch("/checklist?tipo=" + tipoSel.value);
+  if (jobAtual) return;
+  const uf = form.uf.value;
+  const mun = form.municipio.value;
+  const r = await fetch(
+    `/checklist?tipo=${tipoSel.value}&uf=${encodeURIComponent(uf)}&municipio=${encodeURIComponent(mun)}`
+  );
   render(await r.json(), false);
 }
-tipoSel.addEventListener("change", () => {
-  if (!jobAtual) carregarChecklist();
-});
+tipoSel.addEventListener("change", carregarChecklist);
+form.uf.addEventListener("input", carregarChecklist);
+form.municipio.addEventListener("input", carregarChecklist);
 carregarChecklist();
 
 form.addEventListener("submit", async (e) => {

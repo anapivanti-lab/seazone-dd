@@ -37,9 +37,9 @@ async def provedores(tipo: str):
 
 
 @app.get("/checklist")
-async def checklist(tipo: str):
-    """Lista COMPLETA de documentos da DD (para mostrar tudo já na abertura)."""
-    ctx = Contexto(tipo=TipoPessoa(tipo), documento="0")
+async def checklist(tipo: str, uf: str = "", municipio: str = ""):
+    """Lista COMPLETA de documentos da DD (reflete o site certo pela UF/cidade)."""
+    ctx = Contexto(tipo=TipoPessoa(tipo), documento="0", uf=uf, municipio=municipio)
     return JSONResponse(
         [{"nome": it.nome, "grupo": it.grupo, "modo": it.modo} for it in itens_para(ctx)]
     )
