@@ -1,7 +1,11 @@
-"""Certidão de Protestos — CENPROT (consulta nacional de protestos). PJ e PF.
-Obs.: a consulta nacional pode exigir cadastro/login gratuito no portal — o
-perfil do navegador é persistente, então você só faz o login uma vez."""
+"""Certidão de Protestos — CENPROT (consulta nacional). PJ e PF.
+
+Abre a consulta no navegador automático (com o certificado disponível para
+login) e preenche o documento. Você resolve o captcha e consulta.
+"""
 from ..base import BaseProvider, registrar
+
+URL = "https://www.pesquisaprotesto.com.br/servico/consulta-documento"
 
 
 @registrar
@@ -9,7 +13,11 @@ class Protestos(BaseProvider):
     nome = "Certidão de Protestos (CENPROT)"
     nome_arquivo = "Protestos_CENPROT"
     nivel = "nacional"
-    # Consulta nacional GRATUITA e SEM cadastro (o login só é exigido para
-    # emitir a certidão detalhada). Vamos direto na página de consulta.
-    URL = "https://www.pesquisaprotesto.com.br/servico/consulta-documento"
-    SELETOR = "#cpf_cnpj, input[type='text']"
+
+    async def abrir(self, ctx, page):
+        await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+        await page.wait_for_timeout(2500)
+        try:
+            await page.fill("#cpf_cnpj", ctx.documento, timeout=8000)
+        except Exception:
+            pass

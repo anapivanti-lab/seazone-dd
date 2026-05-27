@@ -95,8 +95,8 @@ def itens_para(ctx) -> list[Item]:
     itens: list[Item] = [
         Item("CND Federal (Receita/PGFN)", "Federais", modo="abrir", url=_RECEITA_CND),
         Item("CND Trabalhista (TST)", "Federais", modo="auto", provider="CND Trabalhista (TST)"),
-        Item("Certidão de Protestos (CENPROT)", "Federais", modo="abrir",
-             url="https://www.pesquisaprotesto.com.br/servico/consulta-documento"),
+        Item("Certidão de Protestos (CENPROT)", "Federais", modo="auto",
+             provider="Certidão de Protestos (CENPROT)"),
     ]
     if pj:
         itens.append(Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais",
@@ -105,10 +105,14 @@ def itens_para(ctx) -> list[Item]:
     uf_ok = bool(uf)
     muni_ok = bool(muni)
 
-    # Estadual (Fazenda) — BA não tem captcha => automático; SC/SP abrem no navegador
-    if uf == "BA":
-        itens.append(Item("CND Estadual (Fazenda)", "Estaduais", modo="auto",
-                          provider="CND Estadual (Fazenda) — BA"))
+    # Estadual (Fazenda) — UFs com provedor que preenche sozinho (você só faz o captcha)
+    _sefaz_auto = {
+        "BA": "CND Estadual (Fazenda) — BA",
+        "SC": "CND Estadual (Fazenda) — SC",
+        "SP": "CND Estadual (Fazenda) — SP",
+    }
+    if uf in _sefaz_auto:
+        itens.append(Item("CND Estadual (Fazenda)", "Estaduais", modo="auto", provider=_sefaz_auto[uf]))
     else:
         itens.append(_loc("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), uf_ok, "UF", f"SEFAZ de {onde_uf}"))
 
