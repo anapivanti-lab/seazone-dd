@@ -20,3 +20,22 @@ NAVEGADOR_VISIVEL = True
 
 for _p in (PASTA_SAIDA, PASTA_PROCESSOS, PASTA_PERFIL):
     _p.mkdir(parents=True, exist_ok=True)
+
+# --- Certificado digital (login automático nos sites que exigem) ---
+# CERT_PFX/CERT_SENHA vêm de config_local.py (fora do Git). Sem ele, fica desativado.
+try:
+    from .config_local import CERT_PFX, CERT_SENHA
+except Exception:
+    CERT_PFX = None
+    CERT_SENHA = None
+
+# Sites que podem pedir login por certificado (origens exatas para o navegador)
+CERT_ORIGINS = [
+    "https://cav.receita.fazenda.gov.br",
+    "https://certificado.sso.acesso.gov.br",
+    "https://sso.acesso.gov.br",
+    "https://www.pesquisaprotesto.com.br",
+    "https://certidoes.tjsc.jus.br",
+    "https://esaj.tjsp.jus.br",
+    "https://portalcertidoes.tjba.jus.br",
+]

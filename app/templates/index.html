@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
   <header>
@@ -52,6 +52,17 @@
         </div>
       </fieldset>
 
+      <fieldset class="outro" id="processoBox" hidden>
+        <legend>📄 Leitor de processos</legend>
+        <p class="dica">Baixe o PDF do processo (Jusbrasil/tribunal) e suba aqui — o sistema lê e
+          resume <b>partes, valores e riscos</b> (criminal, fraude, execução, etc.).</p>
+        <div class="linha">
+          <input id="processoFile" type="file" accept="application/pdf">
+          <button type="button" id="btnProcesso" class="secundario">Ler processo</button>
+        </div>
+        <div id="processos"></div>
+      </fieldset>
+
       <div class="acoes" id="acoes" hidden>
         <button type="button" id="concluir">Concluir e gerar relatório</button>
         <button type="button" id="abrirPasta" class="secundario">Abrir pasta dos PDFs</button>
@@ -60,6 +71,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>

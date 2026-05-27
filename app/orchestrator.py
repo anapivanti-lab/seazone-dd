@@ -8,11 +8,12 @@ import subprocess
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from playwright.async_api import async_playwright
 
 from .checklist import itens_para
-from .config import PASTA_PERFIL
+from .config import CERT_ORIGINS, CERT_PFX, CERT_SENHA, PASTA_PERFIL
 from .models import Contexto
 from .providers.base import provedor_por_nome
 from .providers.util import salvar_download
@@ -37,6 +38,7 @@ class Job:
     ctx: Contexto
     selecionados: list[str] = field(default_factory=list)
     passos: list[Passo] = field(default_factory=list)
+    processos: list = field(default_factory=list)  # resumos de processos lidos
     estado: str = "criado"  # criado | executando | aguardando_voce | concluido
     criado_em: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     _pw: object = field(default=None, repr=False, compare=False)
@@ -53,6 +55,7 @@ class Job:
                  "status": p.status, "mensagem": p.mensagem, "arquivo": p.arquivo}
                 for p in self.passos
             ],
+            "processos": self.processos,
         }
 
 
@@ -90,6 +93,11 @@ async def _abrir_navegador(pw):
         args=["--disable-blink-features=AutomationControlled", "--start-maximized"],
         ignore_default_args=["--enable-automation"], locale="pt-BR", no_viewport=True,
     )
+    # Apresenta o certificado digital automaticamente nos sites que pedem login
+    if CERT_PFX and Path(CERT_PFX).exists():
+        comum["client_certificates"] = [
+            {"origin": o, "pfxPath": CERT_PFX, "passphrase": CERT_SENHA} for o in CERT_ORIGINS
+        ]
     try:
         contexto = await pw.chromium.launch_persistent_context(channel="chrome", **comum)
     except Exception:

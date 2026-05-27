@@ -70,3 +70,5 @@ table.cl .ac { white-space: nowrap; width: 1%; text-align: right; }
 .upbtn:hover { background: #e2eaf0; }
 .outro { border: 1px dashed #cfd8e0; border-radius: 8px; margin: 1.2rem 0; padding: .6rem 1rem; }
 .outro .linha { align-items: center; margin: .3rem 0; }
+.proc { background: #f8fafb; border: 1px solid #e3e6ea; border-radius: 6px; padding: .6rem .8rem; margin: .5rem 0; font-size: .85rem; }
+.proc.alerta { border-left: 4px solid #c0392b; background: #fdf3f2; }

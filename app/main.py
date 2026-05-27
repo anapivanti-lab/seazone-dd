@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .checklist import itens_para
+from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
 from .providers import provedores_para
@@ -78,6 +79,22 @@ async def upload(job_id: str, item: str = Form(...), arquivo: UploadFile = File(
     passo.arquivo = str(destino)
     passo.mensagem = f"Enviado: {arquivo.filename}"
     return JSONResponse(job.to_dict())
+
+
+@app.post("/ler-processo/{job_id}")
+async def ler_processo(job_id: str, arquivo: UploadFile = File(...)):
+    """Sobe o PDF de um processo e devolve o resumo (número, partes, valores, riscos)."""
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    conteudo = await arquivo.read()
+    base = _slug(Path(arquivo.filename or "processo").stem)
+    destino = job.ctx.pasta_saida / f"PROCESSO_{base}.pdf"
+    destino.write_bytes(conteudo)
+    resumo = analisar(str(destino))
+    resumo["arquivo"] = arquivo.filename
+    job.processos.append(resumo)
+    return JSONResponse(resumo)
 
 
 @app.post("/concluir/{job_id}")

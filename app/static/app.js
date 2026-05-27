@@ -10,6 +10,10 @@ const btnAbrirPasta = document.getElementById("abrirPasta");
 const btnOutro = document.getElementById("btnOutro");
 const outroNome = document.getElementById("outroNome");
 const outroFile = document.getElementById("outroFile");
+const processoBox = document.getElementById("processoBox");
+const processoFile = document.getElementById("processoFile");
+const btnProcesso = document.getElementById("btnProcesso");
+const processosDiv = document.getElementById("processos");
 
 const META = {
   sucesso: ["✅", "Emitida (auto)"],
@@ -81,6 +85,7 @@ form.addEventListener("submit", async (e) => {
   const { job_id } = await resp.json();
   jobAtual = job_id;
   outroBox.hidden = false;
+  processoBox.hidden = false;
   acoes.hidden = false;
   ultimoRender = "";
   acompanhar();
@@ -107,6 +112,40 @@ btnOutro.addEventListener("click", () => {
   }
 });
 
+btnProcesso.addEventListener("click", async () => {
+  if (!processoFile.files[0]) return;
+  btnProcesso.disabled = true;
+  btnProcesso.textContent = "Lendo…";
+  const fd = new FormData();
+  fd.append("arquivo", processoFile.files[0]);
+  await fetch("/ler-processo/" + jobAtual, { method: "POST", body: fd });
+  processoFile.value = "";
+  btnProcesso.disabled = false;
+  btnProcesso.textContent = "Ler processo";
+  atualizar();
+});
+
+function renderProcessos(lista) {
+  if (!lista || !lista.length) {
+    processosDiv.innerHTML = "";
+    return;
+  }
+  processosDiv.innerHTML = lista
+    .map((p) => {
+      const partes = Object.entries(p.partes || {}).map(([k, v]) => `${k}: ${v}`).join(" · ") || "—";
+      const valores = (p.valores || []).join(", ") || "—";
+      const riscos = (p.riscos || []).length ? p.riscos.join(", ") : "nenhum risco óbvio detectado";
+      const semTexto = p.tem_texto ? "" : '<br><span class="obs">⚠️ PDF sem texto (imagem) — leitura limitada.</span>';
+      return `<div class="proc${p.criminal || p.fraude ? " alerta" : ""}">
+        <b>${p.arquivo || "Processo"}</b> — nº ${p.numero}<br>
+        <span class="obs">Partes:</span> ${partes}<br>
+        <span class="obs">Valores:</span> ${valores}<br>
+        <span class="obs">Riscos:</span> <b>${riscos}</b>${semTexto}
+      </div>`;
+    })
+    .join("");
+}
+
 btnConcluir.addEventListener("click", async () => {
   btnConcluir.disabled = true;
   btnConcluir.textContent = "Gerando relatório…";
@@ -131,6 +170,7 @@ async function atualizar() {
     render(job.passos, true);
     ultimoRender = assinatura;
   }
+  renderProcessos(job.processos);
   return job;
 }
 
