@@ -35,18 +35,9 @@ def _ocr_imagem(img) -> str:
         return ""
 
 
-def _texto_de_pdf(caminho: str) -> str:
-    # 1) tenta extrair o texto direto (Cartão CNPJ costuma ser PDF de texto)
-    texto = ""
-    try:
-        from pypdf import PdfReader
-        r = PdfReader(caminho)
-        texto = "\n".join((p.extract_text() or "") for p in r.pages)
-    except Exception:
-        texto = ""
-    if len(texto.strip()) >= 40:
-        return texto
-    # 2) PDF escaneado/foto -> renderiza as páginas e faz OCR
+def _ocr_de_pdf(caminho: str) -> str:
+    """Renderiza cada página do PDF como imagem (PyMuPDF) e faz OCR — pega dados
+    que estão em IMAGEM dentro do PDF (ex.: CNH Digital, RG escaneado)."""
     try:
         import fitz  # PyMuPDF
         from PIL import Image
@@ -56,22 +47,41 @@ def _texto_de_pdf(caminho: str) -> str:
             pix = page.get_pixmap(dpi=300)
             partes.append(_ocr_imagem(Image.open(io.BytesIO(pix.tobytes("png")))))
         doc.close()
-        return "\n".join(partes).strip() or texto
+        return "\n".join(partes).strip()
     except Exception:
-        return texto
+        return ""
 
 
-def _texto_documento(caminho: str) -> str:
+def _texto_de_pdf(caminho: str, ocr: bool = False) -> str:
+    # 1) texto direto (Cartão CNPJ costuma ser PDF de texto)
+    texto = ""
+    try:
+        from pypdf import PdfReader
+        r = PdfReader(caminho)
+        texto = "\n".join((p.extract_text() or "") for p in r.pages)
+    except Exception:
+        texto = ""
+    # 2) faz OCR da imagem se pedido (ex.: identidade) OU se não veio texto útil.
+    #    Em PDFs de identidade o texto costuma ser só o rodapé/assinatura — os dados
+    #    reais estão na imagem; por isso o OCR vem PRIMEIRO no resultado.
+    if ocr or len(texto.strip()) < 40:
+        ocr_txt = _ocr_de_pdf(caminho)
+        if ocr_txt:
+            texto = ocr_txt + "\n" + texto
+    return texto
+
+
+def _texto_documento(caminho: str, ocr: bool = False) -> str:
     ext = Path(caminho).suffix.lower()
     if ext == ".pdf":
-        return _texto_de_pdf(caminho)
+        return _texto_de_pdf(caminho, ocr=ocr)
     if ext in IMG_EXT:
         try:
             from PIL import Image
             return _ocr_imagem(Image.open(caminho))
         except Exception:
             return ""
-    return _texto_de_pdf(caminho)  # desconhecido: tenta como PDF
+    return _texto_de_pdf(caminho, ocr=ocr)  # desconhecido: tenta como PDF
 
 
 def extrair_cartao_cnpj(caminho: str) -> dict:
@@ -79,6 +89,9 @@ def extrair_cartao_cnpj(caminho: str) -> dict:
     município (via BrasilAPI a partir do número encontrado)."""
     texto = _texto_documento(caminho)
     m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", texto)
+    if not m:  # não achou no texto -> tenta OCR da imagem (cartão escaneado/foto)
+        texto = _texto_documento(caminho, ocr=True)
+        m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", texto)
     cnpj = re.sub(r"\D", "", m.group(0)) if m else ""
     out = {"ok": bool(cnpj), "tipo": "PJ", "documento": cnpj,
            "nome": "", "uf": "", "municipio": "", "endereco": ""}
@@ -92,9 +105,18 @@ def extrair_cartao_cnpj(caminho: str) -> dict:
     return out
 
 
+def _limpar_nome(s: str) -> str:
+    """Remove ruído de OCR no começo do nome (tokens curtos/minúsculos/com número)."""
+    toks = (s or "").split()
+    while toks and (len(toks[0]) <= 2 or toks[0].islower() or any(c.isdigit() for c in toks[0])):
+        toks.pop(0)
+    return " ".join(toks).strip()
+
+
 def extrair_identidade(caminho: str) -> dict:
-    """Lê RG/CNH e devolve CPF, RG, nome, nome da mãe/pai e data de nascimento."""
-    texto = _texto_documento(caminho)
+    """Lê RG/CNH e devolve CPF, RG, nome, nome da mãe/pai e data de nascimento.
+    Sempre faz OCR (em CNH/RG os dados ficam na imagem, não no texto do PDF)."""
+    texto = _texto_documento(caminho, ocr=True)
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     plano = " ".join(texto.split())
 
@@ -104,10 +126,10 @@ def extrair_identidade(caminho: str) -> dict:
         cpf = re.sub(r"\D", "", m.group(0))
 
     rg = ""
-    m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|IDENTIDADE)\D{0,15}(\d{1,2}\.?\d{3}\.?\d{3}-?\w?)",
+    m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|DOC[.\s/]*IDENTIDADE|IDENTIDADE)[^\d]{0,30}(\d[\d.\-]{5,12}\w?)",
                   texto, re.I)
     if m:
-        rg = m.group(1)
+        rg = m.group(1).strip(" .-")
 
     mnasc = re.search(r"NASC\w*\D{0,20}(\d{2}/\d{2}/\d{4})", texto, re.I)
     datas = re.findall(r"\b\d{2}/\d{2}/\d{4}\b", plano)
@@ -134,6 +156,7 @@ def extrair_identidade(caminho: str) -> dict:
                 nome_mae = cand[0]
             break
 
+    nome, nome_mae, nome_pai = _limpar_nome(nome), _limpar_nome(nome_mae), _limpar_nome(nome_pai)
     ok = bool(cpf or rg or nome or nome_mae or data_nascimento)
     out = {"ok": ok, "tipo": "PF", "documento": cpf, "nome": nome, "rg": rg,
            "nome_mae": nome_mae, "nome_pai": nome_pai, "data_nascimento": data_nascimento}
