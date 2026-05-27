@@ -29,6 +29,12 @@ except Exception:
     CERT_PFX = None
     CERT_SENHA = None
 
+# Token da API do Portal da Transparência (checagem de PEP) — vem de config_local.
+try:
+    from .config_local import PORTAL_TOKEN
+except Exception:
+    PORTAL_TOKEN = None
+
 # Sites que podem pedir login por certificado (origens exatas para o navegador)
 CERT_ORIGINS = [
     "https://cav.receita.fazenda.gov.br",

@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .leitor import _extrair_texto
+from .pep import checar as checar_pep
 
 CRITERIOS = [
     "1. Todas as certidões são negativas (ou positivas com efeito de negativa)?",
@@ -47,6 +48,12 @@ def gerar(job) -> dict:
     situacao = dados.get("situacao", "")
     socios = dados.get("socios", [])
 
+    # PEP — por CPF (PF) ou pelos nomes dos sócios (PJ)
+    if ctx.tipo.value == "PF":
+        pep_res = checar_pep([], cpf=ctx.documento)
+    else:
+        pep_res = checar_pep(socios)
+
     positivas = [c for c in certidoes if c["classe"] == "positiva"]
     indet = [c for c in certidoes if c["classe"] == "indeterminado"]
     crim = [pr for pr in job.processos if pr.get("criminal")]
@@ -72,8 +79,16 @@ def gerar(job) -> dict:
         crits.append(("revisar", f"CNAE {cnae} — {cnae_desc}. Confirme se condiz com a atividade da franquia."))
     else:
         crits.append(("revisar", "CNAE não obtido automaticamente — confira no Cartão CNPJ."))
-    # 4 — PEP
-    crits.append(("revisar", "Confirme se o representante é PEP (verificação manual)."))
+    # 4 — PEP (Portal da Transparência)
+    if not pep_res["disponivel"]:
+        crits.append(("revisar", "Configure o token do Portal da Transparência para checar PEP."))
+    elif pep_res["pep"]:
+        achados = "; ".join(f"{p['nome']} ({p['funcao']})" for p in pep_res["pep"])
+        crits.append(("alerta", f"POSSÍVEL PEP: {achados}"))
+    elif pep_res["verificados"]:
+        crits.append(("ok", f"Nenhum PEP encontrado ({len(pep_res['verificados'])} verificado(s))."))
+    else:
+        crits.append(("revisar", "Sem sócios/CPF para checar PEP (ex.: MEI sem sócios)."))
     # 5 — protestos
     if prot and prot["classe"] == "negativa":
         crits.append(("ok", "Certidão de protestos negativa."))
