@@ -54,6 +54,8 @@ async function lerDocumento() {
   set("rg", d.rg);
   set("nome_mae", d.nome_mae);
   set("data_nascimento", d.data_nascimento);
+  set("orgao_expedidor", d.orgao_expedidor);
+  set("nome_pai", d.nome_pai);
   lerStatus.textContent = d.ok
     ? "✅ Li o documento. Confira os campos e complete o que faltar (e o endereço)."
     : "⚠️ " + (d.erro || "Não consegui ler tudo.") + " Preencha os campos à mão.";

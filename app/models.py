@@ -38,6 +38,10 @@ class Contexto:
     nome_mae: str = ""           # nome da mãe (idem)
     endereco: str = ""           # endereço (idem)
     data_nascimento: str = ""    # data de nascimento (idem)
+    estado_civil: str = ""       # estado civil (você preenche; certidões de PF)
+    orgao_expedidor: str = ""    # órgão expedidor do RG (vem da identidade)
+    nome_pai: str = ""           # nome do pai (vem da identidade)
+    nacionalidade: str = "Brasileira"
     pasta_saida: Optional[Path] = None
 
     def __post_init__(self):

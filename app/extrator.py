@@ -171,6 +171,12 @@ def extrair_identidade(caminho: str) -> dict:
     if m:
         rg = m.group(1).strip(" .-")
 
+    # Órgão expedidor (ex.: SSP/SP, SEJUSP/MT) — costuma vir logo após o nº do RG
+    orgao = ""
+    mo = re.search(r"\b\d{6,9}\s+([A-ZÀ-Ú]{2,8})(?:[\s/\-]+([A-Z]{2})\b)?", texto)
+    if mo and _cmp(mo.group(1)) not in _BOILER:
+        orgao = mo.group(1) + ("/" + mo.group(2) if mo.group(2) else "")
+
     # Data de nascimento: a data mais antiga plausível (>= 16 anos atrás)
     ano_max = datetime.date.today().year - 16
     cands = []
@@ -211,7 +217,8 @@ def extrair_identidade(caminho: str) -> dict:
 
     ok = bool(cpf or rg or nome or nome_mae or data_nascimento)
     out = {"ok": ok, "tipo": "PF", "documento": cpf, "nome": nome, "rg": rg,
-           "nome_mae": nome_mae, "nome_pai": nome_pai, "data_nascimento": data_nascimento}
+           "nome_mae": nome_mae, "nome_pai": nome_pai, "data_nascimento": data_nascimento,
+           "orgao_expedidor": orgao}
     if not ok:
         out["erro"] = "Não consegui ler o documento. Preencha os campos à mão."
     return out

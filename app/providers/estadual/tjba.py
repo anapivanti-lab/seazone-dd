@@ -12,6 +12,9 @@ pede nº de certidão já emitida). Fluxo idêntico nos dois graus:
 NÃO se preenche CPF/CNPJ na 1ª tela (esse campo é do quadro "Consultar").
 Página tem reCAPTCHA (invisível); você valida e emite.
 """
+import re
+import unicodedata
+
 from ..base import BaseProvider, registrar
 from ...models import TipoPessoa
 
@@ -27,6 +30,30 @@ async def _tentar(*acoes) -> bool:
         except Exception:
             pass
     return False
+
+
+def _raiz(s: str) -> str:
+    """Raiz do estado civil para casar com a opção do site (ex.: 'Solteiro(a)'->'SOLTE')."""
+    s = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+    return re.sub(r"[^A-Za-z]", "", s).upper()[:5]
+
+
+async def _escolher_estado_civil(page, valor: str) -> None:
+    raiz = _raiz(valor)
+    if not raiz:
+        return
+    try:
+        await page.evaluate(
+            """(raiz) => {
+            const s = document.querySelector('#selectEstadoCivil'); if (!s) return;
+            const norm = t => t.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+            const o = [...s.options].find(o => norm(o.text).includes(raiz));
+            if (o) { s.value = o.value; s.dispatchEvent(new Event('change', {bubbles: true})); }
+        }""",
+            raiz,
+        )
+    except Exception:
+        pass
 
 
 async def _escolher_modelo(page, palavra: str) -> bool:
@@ -93,7 +120,13 @@ class _TJBABase(BaseProvider):
         )
         await page.wait_for_timeout(900)
         await _avancar(page)
-        await page.wait_for_timeout(4000)
+        await page.wait_for_timeout(2500)
+        # espera a 2ª tela montar (campo-chave de PJ ou PF)
+        alvo = "#razaoSocial" if ctx.tipo == TipoPessoa.PJ else "#cpf"
+        try:
+            await page.wait_for_selector(alvo, timeout=6000)
+        except Exception:
+            await page.wait_for_timeout(1500)
         # 2ª tela — preenche conforme PJ ou PF (você valida o captcha e emite)
         if ctx.tipo == TipoPessoa.PJ:
             await _tentar(lambda: page.fill("#razaoSocial", ctx.nome, timeout=4000))
@@ -101,10 +134,14 @@ class _TJBABase(BaseProvider):
             await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=4000))
         else:
             await _tentar(lambda: page.fill("#nome", ctx.nome, timeout=4000))
+            await _tentar(lambda: page.fill("#nacionalidade", ctx.nacionalidade or "Brasileira", timeout=3000))
+            await _escolher_estado_civil(page, ctx.estado_civil)
             await _tentar(lambda: page.fill("#cpf", ctx.documento, timeout=4000))
             await _tentar(lambda: page.fill("#rg", ctx.rg, timeout=3000))
+            await _tentar(lambda: page.fill("#orgao", ctx.orgao_expedidor, timeout=3000))
             await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=3000))
             await _tentar(lambda: page.fill("#filiacao1", ctx.nome_mae, timeout=3000))
+            await _tentar(lambda: page.fill("#filiacao2", ctx.nome_pai, timeout=3000))
 
 
 @registrar

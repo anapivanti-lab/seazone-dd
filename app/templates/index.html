@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=18">
+  <link rel="stylesheet" href="/static/style.css?v=19">
 </head>
 <body>
   <header>
@@ -42,6 +42,21 @@
           <label class="cresce">RG<input name="rg" id="rg" placeholder="(vem do documento)"></label>
           <label class="cresce">Nome da mãe<input name="nome_mae" id="nome_mae" placeholder="(vem do documento)"></label>
           <label>Nascimento<input name="data_nascimento" id="data_nascimento" placeholder="dd/mm/aaaa"></label>
+        </div>
+        <div class="linha pfonly" hidden>
+          <label class="cresce">Órgão expedidor do RG<input name="orgao_expedidor" id="orgao_expedidor" placeholder="(vem do documento)"></label>
+          <label class="cresce">Estado civil ✍️
+            <select name="estado_civil" id="estado_civil">
+              <option value="">Selecione</option>
+              <option>Solteiro(a)</option>
+              <option>Casado(a)</option>
+              <option>Divorciado(a)</option>
+              <option>Viúvo(a)</option>
+              <option>União estável</option>
+              <option>Separado(a)</option>
+            </select>
+          </label>
+          <input type="hidden" name="nome_pai" id="nome_pai">
         </div>
         <div class="linha">
           <label class="cresce">Endereço completo ✍️
@@ -96,6 +111,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=18"></script>
+  <script src="/static/app.js?v=19"></script>
 </body>
 </html>

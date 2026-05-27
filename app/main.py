@@ -62,12 +62,16 @@ async def emitir(
     nome_mae: str = Form(""),
     endereco: str = Form(""),
     data_nascimento: str = Form(""),
+    estado_civil: str = Form(""),
+    orgao_expedidor: str = Form(""),
+    nome_pai: str = Form(""),
     municipal_url: str = Form(""),
     selecionados: list[str] = Form(default=[]),
 ):
     ctx = Contexto(tipo=TipoPessoa(tipo), documento=documento, nome=nome, uf=uf,
                    municipio=municipio, rg=rg, nome_mae=nome_mae, endereco=endereco,
-                   data_nascimento=data_nascimento)
+                   data_nascimento=data_nascimento, estado_civil=estado_civil,
+                   orgao_expedidor=orgao_expedidor, nome_pai=nome_pai)
     job = criar_job(ctx, selecionados, municipal_url=municipal_url)
     asyncio.create_task(executar_job(job))
     return JSONResponse({"job_id": job.id})
