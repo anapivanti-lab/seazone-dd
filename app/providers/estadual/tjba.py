@@ -1,12 +1,15 @@
 """Certidões da Justiça Estadual da Bahia (TJBA) — 1º e 2º grau, Cível e Criminal.
 
-Calibrado em 27/05/2026. O fluxo de EMISSÃO ("Gerar Certidão") é igual nos dois
-graus:
-  Tipo Pessoa (radioFisica/radioJuridica) → Modelo (#selectModelo) →
-  Tipo Participação (radioAmbas) → CPF/CNPJ → Avançar →
-  (PJ) Razão Social/CNPJ/Endereço (#razaoSocial/#cnpj/#endereco).
-Diferenças: a URL e o campo do documento (1º grau = #mat-input-0; 2º grau =
-#documento). O quadro "Consultar Certidão" (que pede nº da certidão) NÃO é usado.
+Calibrado em 27/05/2026. Usa o quadro "GERAR Certidão" (NÃO o "Consultar", que
+pede nº de certidão já emitida). Fluxo idêntico nos dois graus:
+  1) Tipo Pessoa (radioFisica/radioJuridica)
+  2) Modelo (#selectModelo, via select_option — o Angular só "vê" assim)
+  3) Tipo Participação = Ambas (radioAmbas)
+  -> aí surgem os botões "Avançar" (<input type=submit>); clica o 1º (Gerar)
+  4) 2ª tela:
+       PJ: #razaoSocial, #cnpj, #endereco
+       PF: #nome, #cpf, #rg, #endereco, #filiacao1 (Nome da Mãe)
+NÃO se preenche CPF/CNPJ na 1ª tela (esse campo é do quadro "Consultar").
 Página tem reCAPTCHA (invisível); você valida e emite.
 """
 from ..base import BaseProvider, registrar
@@ -27,21 +30,19 @@ async def _tentar(*acoes) -> bool:
 
 
 async def _escolher_modelo(page, palavra: str) -> bool:
-    """No #selectModelo, escolhe a opção que contém a palavra-chave (cível/criminal)
-    e dispara o 'change' (o Angular escuta)."""
+    """Seleciona no #selectModelo a opção que contém a palavra (cível/criminal),
+    via select_option — assim dispara os eventos que o formulário Angular exige
+    para liberar o botão 'Avançar'."""
     try:
-        return await page.evaluate(
-            """(palavra) => {
-            const sel = document.querySelector('#selectModelo');
-            if (!sel) return false;
-            const alvo = [...sel.options].find(o => o.text.toLowerCase().includes(palavra));
-            if (!alvo) return false;
-            sel.value = alvo.value;
-            sel.dispatchEvent(new Event('change', {bubbles: true}));
-            return true;
-        }""",
+        val = await page.evaluate(
+            """(p) => { const s = document.querySelector('#selectModelo'); if (!s) return null;
+            const o = [...s.options].find(o => o.text.toLowerCase().includes(p)); return o ? o.value : null; }""",
             palavra,
         )
+        if val is None:
+            return False
+        await page.select_option("#selectModelo", value=val)
+        return True
     except Exception:
         return False
 
@@ -56,42 +57,54 @@ async def _marcar_pessoa(page, ctx):
     )
 
 
+async def _avancar(page) -> bool:
+    """Clica o 1º 'Avançar' (do quadro Gerar). É um <input type=submit>, então
+    o seletor de <button> não basta — get_by_role pega o value como nome."""
+    for fn in (
+        lambda: page.get_by_role("button", name="Avançar").first.click(timeout=4000),
+        lambda: page.locator("input[type=submit][value*='Avan']").first.click(timeout=3000),
+        lambda: page.locator("button:has-text('Avançar')").first.click(timeout=3000),
+    ):
+        try:
+            await fn()
+            return True
+        except Exception:
+            pass
+    return False
+
+
 class _TJBABase(BaseProvider):
-    """Emissão no TJBA. Subclasses definem url, campo do doc e o modelo."""
+    """Emissão no TJBA. Subclasses definem url e o modelo (cível/criminal)."""
     ufs = ["BA"]
     url = URL_1
-    doc_sel = "#mat-input-0"
     modelo_kw = "cível"
 
     async def abrir(self, ctx, page):
         await page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
-        await page.wait_for_timeout(4000)
+        await page.wait_for_timeout(4500)
         await _marcar_pessoa(page, ctx)
         await page.wait_for_timeout(700)
         await _escolher_modelo(page, self.modelo_kw)
-        await page.wait_for_timeout(700)
-        # Tipo de participação: Ambas
+        await page.wait_for_timeout(800)
         await _tentar(
             lambda: page.click("label:has-text('Ambas')", timeout=3000),
             lambda: page.check("#radioAmbas", timeout=3000),
             lambda: page.click("#radioAmbas", timeout=3000),
         )
-        await page.wait_for_timeout(500)
-        # CPF/CNPJ (1º grau = #mat-input-0; 2º grau = #documento)
-        await _tentar(
-            lambda: page.fill(self.doc_sel, ctx.documento, timeout=4000),
-            lambda: page.fill("#mat-input-0", ctx.documento, timeout=2500),
-            lambda: page.fill("#documento", ctx.documento, timeout=2500),
-        )
-        await page.wait_for_timeout(500)
-        # Avançar (o 1º botão "Avançar" é o do quadro "Gerar")
-        await _tentar(lambda: page.click("button:has-text('Avançar')", timeout=4000))
-        await page.wait_for_timeout(3500)
-        # 2ª tela (PJ): Razão Social, CNPJ, Endereço
+        await page.wait_for_timeout(900)
+        await _avancar(page)
+        await page.wait_for_timeout(4000)
+        # 2ª tela — preenche conforme PJ ou PF (você valida o captcha e emite)
         if ctx.tipo == TipoPessoa.PJ:
             await _tentar(lambda: page.fill("#razaoSocial", ctx.nome, timeout=4000))
             await _tentar(lambda: page.fill("#cnpj", ctx.documento, timeout=4000))
             await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=4000))
+        else:
+            await _tentar(lambda: page.fill("#nome", ctx.nome, timeout=4000))
+            await _tentar(lambda: page.fill("#cpf", ctx.documento, timeout=4000))
+            await _tentar(lambda: page.fill("#rg", ctx.rg, timeout=3000))
+            await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=3000))
+            await _tentar(lambda: page.fill("#filiacao1", ctx.nome_mae, timeout=3000))
 
 
 @registrar
@@ -99,7 +112,6 @@ class TJBACivel1(_TJBABase):
     nome = "Justiça Estadual BA — Cível 1º grau"
     nome_arquivo = "TJBA_Civel_1grau"
     url = URL_1
-    doc_sel = "#mat-input-0"
     modelo_kw = "cível"
 
 
@@ -108,7 +120,6 @@ class TJBACriminal1(_TJBABase):
     nome = "Justiça Estadual BA — Criminal 1º grau"
     nome_arquivo = "TJBA_Criminal_1grau"
     url = URL_1
-    doc_sel = "#mat-input-0"
     modelo_kw = "criminal"
 
 
@@ -117,7 +128,6 @@ class TJBACivel2(_TJBABase):
     nome = "Justiça Estadual BA — Cível 2º grau"
     nome_arquivo = "TJBA_Civel_2grau"
     url = URL_2
-    doc_sel = "#documento"
     modelo_kw = "cível"
 
 
@@ -126,5 +136,4 @@ class TJBACriminal2(_TJBABase):
     nome = "Justiça Estadual BA — Criminal 2º grau"
     nome_arquivo = "TJBA_Criminal_2grau"
     url = URL_2
-    doc_sel = "#documento"
     modelo_kw = "criminal"
