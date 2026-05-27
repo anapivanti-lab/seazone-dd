@@ -112,6 +112,7 @@ def _analisar_entidade(job) -> dict:
     papel = ctx.papel or ("Franquia" if pj else "Operador")
     de_quem = "da Franquia" if pj else ("da " + papel if papel.lower().startswith("represent") and _genero(ctx.nome) == "f"
                                         else "do " + papel)
+    sujeito = "a Franquia" if pj else f"o(a) {papel}"
 
     GRUPOS = ("Federais", "Estaduais", "Justiça Estadual", "Justiça Federal", "Municipais")
     certs = [{"nome": p.nome, "classe": _classificar(p.arquivo)}
@@ -150,20 +151,31 @@ def _analisar_entidade(job) -> dict:
     else:
         itens = []
         for pr in procs:
-            cab = f"Processo nº {pr.get('numero') or 's/ número'} — {pr.get('classe') or 'Processo'}"
+            num = pr.get("numero") or "s/ número"
+            classe = (pr.get("classe") or "").strip()
+            tipo = "criminal" if pr.get("criminal") else (classe.lower() if classe else "judicial")
+            pd = (pr.get("papel_dd") or "").lower()
+            if any(k in pd for k in ("passivo", "réu", "reu", "requerid", "executad", "denunciad")):
+                polo = "no polo passivo"
+            elif any(k in pd for k in ("ativo", "autor", "exequente", "reclamante")):
+                polo = "no polo ativo"
+            else:
+                polo = "no processo"
+            frase = f"Foi localizado o processo {tipo} de nº {num}, em que {sujeito} figura {polo}"
             if pr.get("assunto"):
-                cab += f" (objeto: {pr['assunto']})"
-            det = []
-            if pr.get("papel_dd"):
-                det.append(pr["papel_dd"].rstrip("."))
+                frase += f", relativo a {pr['assunto'].split(',')[0].strip().lower()}"
+            frase += ". "
             if pr.get("valor_maximo"):
-                det.append(f"valor/débito de {_reais(pr['valor_maximo'])}")
-            if pr.get("situacao"):
-                det.append(f"situação atual: {pr['situacao']}")
+                frase += f"Valor/débito de {_reais(pr['valor_maximo'])}. "
             if pr.get("sentenca"):
-                det.append(f"sentença: {pr['sentenca'].get('resultado')}")
-            itens.append(cab + (". " + "; ".join(det) + "." if det else "."))
-        t_proc = "Foram localizados os seguintes processos: " + " ".join(itens)
+                frase += f"Desfecho: {pr['sentenca'].get('resultado')}. "
+            elif pr.get("situacao"):
+                frase += f"Situação atual: {pr['situacao']}. "
+            fatos = (pr.get("fatos") or "").strip()
+            if fatos:
+                frase += "Em síntese dos fatos, " + (fatos[:700].rstrip() + "…" if len(fatos) > 700 else fatos)
+            itens.append(frase.strip())
+        t_proc = " ".join(itens)
 
     if prot_classe == "negativa":
         t_prot = f"Não há registros de títulos protestados em nome {de_quem}."
