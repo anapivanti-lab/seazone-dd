@@ -2,7 +2,8 @@
 
 - PJ → Cartão CNPJ: pega o número do CNPJ e completa razão social, endereço, UF e
   município pela BrasilAPI (mais confiável do que ler o PDF inteiro).
-- PF → Identidade (RG/CNH): OCR (português + inglês juntos, mais robusto) +
+- PF → Identidade (RG/CNH): OCR em português + inglês e em dois modos de
+  segmentação (o normal e o "texto esparso", que pega o NOME do titular na CNH) +
   heurística para CPF, RG, nome, nome da mãe/pai e data de nascimento.
 
 Lê PDF de texto (pypdf) e PDF escaneado/foto (Tesseract, renderizando as páginas
@@ -13,6 +14,7 @@ from __future__ import annotations
 import datetime
 import io
 import re
+import unicodedata
 from pathlib import Path
 
 from .cnpj_dados import consultar as consultar_cnpj
@@ -20,25 +22,37 @@ from .ocr import _tesseract_cmd
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif"}
 
+# passadas de OCR: (idioma, psm). psm 11 = "texto esparso" (pega o NOME na CNH).
+PASSES_DOC = (("por", None),)                                   # Cartão CNPJ
+PASSES_ID = (("por", None), ("eng", None), ("por", 11))          # identidade
 
-def _ocr_imagem(img, lang: str = "por") -> str:
+# palavras de moldura da CNH/RG que NÃO são nome de pessoa
+_BOILER = ("REPUBLICA", "FEDERATIVA", "BRASIL", "VALIDA", "TERRITORIO", "NACIONAL",
+           "DEPARTAMENTO", "TRANSITO", "DETRAN", "DENATRAN", "CONTRAN", "HABILITACAO",
+           "ASSINATURA", "PORTADOR", "IDENTIDADE", "EMISSOR", "REGISTRO", "VALIDADE",
+           "NASCIMENTO", "OBSERVACOES", "SERPRO", "PERMISSAO", "CARTEIRA", "MOTORISTA",
+           "DIGITAL", "DOCUMENTO", "FILIACAO", "ESTADUAL", "CONSULTA", "NUMERO",
+           "MINISTERIO", "SECRETARIA", "REPUBLICA")
+
+
+def _ocr_imagem(img, lang: str = "por", psm: int | None = None) -> str:
     cmd = _tesseract_cmd()
     if not cmd:
         return ""
+    config = f"--psm {psm}" if psm else ""
     try:
         import pytesseract
         pytesseract.pytesseract.tesseract_cmd = cmd
         try:
-            return pytesseract.image_to_string(img, lang=lang)
+            return pytesseract.image_to_string(img, lang=lang, config=config)
         except Exception:
             return pytesseract.image_to_string(img)
     except Exception:
         return ""
 
 
-def _ocr_de_pdf(caminho: str, langs=("por",)) -> str:
-    """Renderiza cada página do PDF como imagem (PyMuPDF) e faz OCR em cada idioma
-    pedido — pega dados que estão em IMAGEM dentro do PDF (CNH Digital, RG)."""
+def _ocr_de_pdf(caminho: str, passes=PASSES_DOC) -> str:
+    """Renderiza cada página (PyMuPDF) e faz OCR em cada passada pedida."""
     try:
         import fitz  # PyMuPDF
         from PIL import Image
@@ -46,15 +60,15 @@ def _ocr_de_pdf(caminho: str, langs=("por",)) -> str:
         partes = []
         for page in doc:
             img = Image.open(io.BytesIO(page.get_pixmap(dpi=300).tobytes("png")))
-            for lang in langs:
-                partes.append(_ocr_imagem(img, lang))
+            for lang, psm in passes:
+                partes.append(_ocr_imagem(img, lang, psm))
         doc.close()
         return "\n".join(partes).strip()
     except Exception:
         return ""
 
 
-def _texto_de_pdf(caminho: str, ocr: bool = False, langs=("por",)) -> str:
+def _texto_de_pdf(caminho: str, ocr: bool = False, passes=PASSES_DOC) -> str:
     texto = ""
     try:
         from pypdf import PdfReader
@@ -62,27 +76,25 @@ def _texto_de_pdf(caminho: str, ocr: bool = False, langs=("por",)) -> str:
         texto = "\n".join((p.extract_text() or "") for p in r.pages)
     except Exception:
         texto = ""
-    # OCR da imagem se pedido (identidade) ou se não veio texto útil. Em documentos
-    # de identidade o texto do PDF é só o rodapé; os dados reais estão na imagem.
     if ocr or len(texto.strip()) < 40:
-        ocr_txt = _ocr_de_pdf(caminho, langs=langs)
+        ocr_txt = _ocr_de_pdf(caminho, passes=passes)
         if ocr_txt:
             texto = ocr_txt + "\n" + texto
     return texto
 
 
-def _texto_documento(caminho: str, ocr: bool = False, langs=("por",)) -> str:
+def _texto_documento(caminho: str, ocr: bool = False, passes=PASSES_DOC) -> str:
     ext = Path(caminho).suffix.lower()
     if ext == ".pdf":
-        return _texto_de_pdf(caminho, ocr=ocr, langs=langs)
+        return _texto_de_pdf(caminho, ocr=ocr, passes=passes)
     if ext in IMG_EXT:
         try:
             from PIL import Image
             img = Image.open(caminho)
-            return "\n".join(_ocr_imagem(img, lang) for lang in langs)
+            return "\n".join(_ocr_imagem(img, lang, psm) for lang, psm in passes)
         except Exception:
             return ""
-    return _texto_de_pdf(caminho, ocr=ocr, langs=langs)
+    return _texto_de_pdf(caminho, ocr=ocr, passes=passes)
 
 
 def extrair_cartao_cnpj(caminho: str) -> dict:
@@ -114,10 +126,38 @@ def _limpar_nome(s: str) -> str:
     return " ".join(toks).strip()
 
 
+def _cmp(s: str) -> str:
+    s = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s.upper()).strip()
+
+
+def _eh_nome(s: str) -> bool:
+    return bool(re.search(r"[A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú]{2,}", s))
+
+
+def _achar_nome_titular(linhas, mae, pai) -> str:
+    """O nome do titular = o nome de pessoa que NÃO é moldura do documento nem o
+    pai/mãe. Pega o mais completo (mais palavras)."""
+    excl = [_cmp(mae), _cmp(pai)]
+    cands = []
+    for l in linhas:
+        nome = _limpar_nome(l)
+        if not _eh_nome(nome) or any(c.isdigit() for c in nome):
+            continue
+        c = _cmp(nome)
+        if any(b in c for b in _BOILER):
+            continue
+        if any(e and (c in e or e in c) for e in excl):  # é o pai/mãe
+            continue
+        cands.append(nome)
+    if not cands:
+        return ""
+    return max(cands, key=lambda n: (len(n.split()), len(n)))
+
+
 def extrair_identidade(caminho: str) -> dict:
-    """Lê RG/CNH e devolve CPF, RG, nome, nome da mãe/pai e data de nascimento.
-    Faz OCR em português E inglês (mais robusto) — os dados ficam na imagem."""
-    texto = _texto_documento(caminho, ocr=True, langs=("por", "eng"))
+    """Lê RG/CNH e devolve CPF, RG, nome, nome da mãe/pai e data de nascimento."""
+    texto = _texto_documento(caminho, ocr=True, passes=PASSES_ID)
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     plano = " ".join(texto.split())
 
@@ -125,15 +165,13 @@ def extrair_identidade(caminho: str) -> dict:
     cpfs = re.findall(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", plano)
     cpf = re.sub(r"\D", "", cpfs[0]) if cpfs else ""
 
-    # RG / nº do documento de identidade
     rg = ""
     m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|DOC[.\s/]*IDENTIDADE|IDENTIDADE)[^\d]{0,30}(\d[\d.\-]{5,12}\w?)",
                   texto, re.I)
     if m:
         rg = m.group(1).strip(" .-")
 
-    # Data de nascimento: a data mais antiga plausível (>= 16 anos atrás).
-    # Assim evita confundir com validade / 1ª habilitação / data de emissão.
+    # Data de nascimento: a data mais antiga plausível (>= 16 anos atrás)
     ano_max = datetime.date.today().year - 16
     cands = []
     for dd, mm, yy in re.findall(r"\b(\d{2})/(\d{2})/(\d{4})\b", plano):
@@ -144,32 +182,33 @@ def extrair_identidade(caminho: str) -> dict:
     if mnasc and 1920 <= int(mnasc.group(3)) <= ano_max:
         data_nascimento = f"{mnasc.group(1)}/{mnasc.group(2)}/{mnasc.group(3)}"
     elif cands:
-        data_nascimento = sorted(cands)[0][3]  # ano mais antigo = nascimento
+        data_nascimento = sorted(cands)[0][3]
     else:
         data_nascimento = ""
 
-    def _eh_nome(s):
-        return bool(re.search(r"[A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú]{2,}", s))
-
-    nome = ""
-    for i, l in enumerate(linhas):
-        if re.search(r"\bNOME\b", l, re.I) and not re.search(r"filia|m[ãa]e|pai|social", l, re.I):
-            cand = [x for x in linhas[i + 1:i + 3] if _eh_nome(x)]
-            if cand:
-                nome = cand[0]
-                break
-
+    # Filiação (pai/mãe)
     nome_mae = nome_pai = ""
     for i, l in enumerate(linhas):
         if re.search(r"filia", l, re.I):
             cand = [x for x in linhas[i + 1:i + 6] if _eh_nome(x)]
             if len(cand) >= 2:
-                nome_pai, nome_mae = cand[0], cand[1]  # heurística: 1º pai, 2º mãe
+                nome_pai, nome_mae = cand[0], cand[1]
             elif cand:
                 nome_mae = cand[0]
             break
+    nome_mae, nome_pai = _limpar_nome(nome_mae), _limpar_nome(nome_pai)
 
-    nome, nome_mae, nome_pai = _limpar_nome(nome), _limpar_nome(nome_mae), _limpar_nome(nome_pai)
+    # Nome do titular: tenta o rótulo "NOME"; senão, o nome que não é pai/mãe/moldura
+    nome = ""
+    for i, l in enumerate(linhas):
+        if re.search(r"\bNOME\b", l, re.I) and not re.search(r"filia|m[ãa]e|pai|social", l, re.I):
+            c = [x for x in linhas[i + 1:i + 3] if _eh_nome(x)]
+            if c:
+                nome = _limpar_nome(c[0])
+                break
+    if not nome:
+        nome = _achar_nome_titular(linhas, nome_mae, nome_pai)
+
     ok = bool(cpf or rg or nome or nome_mae or data_nascimento)
     out = {"ok": ok, "tipo": "PF", "documento": cpf, "nome": nome, "rg": rg,
            "nome_mae": nome_mae, "nome_pai": nome_pai, "data_nascimento": data_nascimento}
