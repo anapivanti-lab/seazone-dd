@@ -146,10 +146,7 @@ def itens_para(ctx) -> list[Item]:
         ("BA", "Criminal 2º grau"): "Justiça Estadual BA — Criminal 2º grau",
         ("GO", "Criminal 1º grau"): "Justiça Estadual GO — Criminal (antecedentes)",
     }
-    _tj_obs = {
-        ("BA", "Cível 2º grau"): "Preenche tudo; falta só o nº da certidão de 1º grau (você cola).",
-        ("BA", "Criminal 2º grau"): "Preenche tudo; falta só o nº da certidão de 1º grau (você cola).",
-    }
+    _tj_obs: dict = {}  # (TJBA 2º grau agora preenche tudo pelo quadro "Gerar")
     for g in _GRAUS:
         prov = _tj_auto.get((uf, g))
         if prov:
