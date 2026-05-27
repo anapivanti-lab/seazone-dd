@@ -15,6 +15,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from . import ia_local
 from .extrator import _texto_documento
 from .pep import checar as checar_pep
 from .storage import _slug
@@ -193,6 +194,10 @@ def _analisar_entidade(job) -> dict:
     else:
         itens = []
         for pr in procs:
+            resumo_ia = ia_local.resumir_processo(pr, sujeito)  # IA local (se disponível)
+            if resumo_ia:
+                itens.append(resumo_ia)
+                continue
             num = pr.get("numero") or "s/ número"
             classe = (pr.get("classe") or "").strip()
             tipo = "criminal" if pr.get("criminal") else (classe.lower() if classe else "judicial")
