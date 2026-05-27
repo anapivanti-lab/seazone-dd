@@ -46,6 +46,7 @@ class Job:
     criado_em: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     _pw: object = field(default=None, repr=False, compare=False)
     _contexto: object = field(default=None, repr=False, compare=False)
+    _lock: object = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict:
         return {
@@ -101,6 +102,7 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
                             sob_demanda=sob_demanda))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     job.cnpj_dados = dados or {}
+    job._lock = asyncio.Lock()  # serializa a abertura do navegador (evita corrida)
     JOBS[job.id] = job
     return job
 
@@ -200,6 +202,22 @@ async def executar_job(job: Job) -> None:
     job.estado = "aguardando_voce"
 
 
+async def _descartar_navegador(job: Job) -> None:
+    """Fecha/limpa o navegador controlado (ex.: você fechou a janela)."""
+    try:
+        if job._contexto is not None:
+            await job._contexto.close()
+    except Exception:
+        pass
+    try:
+        if job._pw is not None:
+            await job._pw.stop()
+    except Exception:
+        pass
+    job._contexto = None
+    job._pw = None
+
+
 async def _garantir_navegador(job: Job):
     """Abre o navegador controlado UMA vez e reusa para todas as certidões
     (assim elas viram abas na MESMA janela, não janelas novas)."""
@@ -258,17 +276,33 @@ async def abrir_item(job: Job, nome: str) -> Passo | None:
             finally:
                 await pwf.stop()
             return passo
-        # precisa de captcha: abre uma ABA na mesma janela controlada e preenche
-        try:
-            contexto = await _garantir_navegador(job)
-            page = await contexto.new_page()
-            _ligar_captura(page, prov, passo, job.ctx)
-            await prov.abrir(job.ctx, page)
-            passo.status = "aberta"
-            passo.mensagem = "Aba aberta — resolva o captcha e emita; o PDF é salvo sozinho."
-        except Exception as e:
-            passo.status = "erro"
-            passo.mensagem = f"Não consegui abrir o site ({type(e).__name__})."
+        # precisa de captcha: abre uma ABA na MESMA janela controlada e preenche.
+        # O lock garante que só UMA certidão abre por vez (sem corrida no perfil).
+        if job._lock is None:
+            job._lock = asyncio.Lock()
+        async with job._lock:
+            for tentativa in range(2):
+                try:
+                    contexto = await _garantir_navegador(job)
+                    page = await contexto.new_page()
+                    _ligar_captura(page, prov, passo, job.ctx)
+                    await prov.abrir(job.ctx, page)
+                    passo.status = "aberta"
+                    passo.mensagem = "Aba aberta — resolva o captcha e emita; o PDF é salvo sozinho."
+                    return passo
+                except Exception as e:
+                    nome_err = type(e).__name__
+                    fechado = "TargetClosed" in nome_err or "closed" in str(e).lower()
+                    if fechado and tentativa == 0:
+                        # a janela foi fechada -> descarta e recria UMA vez
+                        await _descartar_navegador(job)
+                        continue
+                    passo.status = "erro"
+                    passo.mensagem = (
+                        "A janela foi fechada; abri uma nova — clique em 'Reabrir site'."
+                        if fechado else f"Não consegui abrir o site ({nome_err})."
+                    )
+                    return passo
         return passo
 
     return passo
