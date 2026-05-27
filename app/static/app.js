@@ -251,17 +251,30 @@ function renderProcessos(lista) {
     processosDiv.innerHTML = "";
     return;
   }
+  const linha = (rot, val) => (val ? `<br><span class="obs">${rot}:</span> ${val}` : "");
   processosDiv.innerHTML = lista
     .map((p) => {
-      const partes = Object.entries(p.partes || {}).map(([k, v]) => `${k}: ${v}`).join(" · ") || "—";
-      const valores = (p.valores || []).join(", ") || "—";
-      const riscos = (p.riscos || []).length ? p.riscos.join(", ") : "nenhum risco óbvio detectado";
+      const partes = (p.partes || []).map((x) => `${x.nome}${x.doc ? " (" + x.doc + ")" : ""}`).join(" · ") || "—";
+      const riscos = (p.riscos || []).length ? p.riscos.join(", ") : "nenhum risco óbvio";
       const semTexto = p.tem_texto ? "" : '<br><span class="obs">⚠️ PDF sem texto (imagem) — leitura limitada.</span>';
+      const sent = p.sentenca ? `<br><span class="obs">Sentença:</span> <b>${p.sentenca.resultado}</b> — ${p.sentenca.trecho}` : "";
+      const ult = p.ultimo_andamento ? `${p.ultimo_andamento.data} — ${p.ultimo_andamento.descricao}` : "";
+      const andamentos = (p.andamentos || []).slice(-10).reverse().map((a) => `<li>${a.data} — ${a.descricao}</li>`).join("");
+      const detalhes = p.fatos || andamentos
+        ? `<details><summary>Ver fatos e andamentos</summary>${p.fatos ? `<p class="obs"><b>Fatos:</b> ${p.fatos}</p>` : ""}${andamentos ? `<b>Andamentos (mais recentes):</b><ul>${andamentos}</ul>` : ""}</details>`
+        : "";
       return `<div class="proc${p.criminal || p.fraude ? " alerta" : ""}">
-        <b>${p.arquivo || "Processo"}</b> — nº ${p.numero}<br>
-        <span class="obs">Partes:</span> ${partes}<br>
-        <span class="obs">Valores:</span> ${valores}<br>
-        <span class="obs">Riscos:</span> <b>${riscos}</b>${semTexto}
+        <b>${p.classe || "Processo"}</b> — nº ${p.numero}
+        ${linha("Objeto", p.assunto)}
+        ${linha("Papel na DD", p.papel_dd)}
+        ${linha("Partes", partes)}
+        ${linha("Valor da causa", p.valor_causa)}
+        ${linha("Vara/Juízo", p.orgao)}${linha("Juiz(a)", p.juiz)}
+        ${linha("Situação atual", p.situacao)}${linha("Réu preso", p.reu_preso)}
+        ${linha("Riscos", "<b>" + riscos + "</b>")}${sent}
+        ${linha("Último andamento", ult)}
+        ${detalhes}
+        <br><span class="obs">Arquivo: ${p.arquivo || "—"}</span>${semTexto}
       </div>`;
     })
     .join("");

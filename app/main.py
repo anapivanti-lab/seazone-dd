@@ -107,7 +107,7 @@ async def ler_processo(job_id: str, arquivo: UploadFile = File(...)):
     base = _slug(Path(arquivo.filename or "processo").stem)
     destino = job.ctx.pasta_saida / f"PROCESSO_{base}.pdf"
     destino.write_bytes(conteudo)
-    resumo = analisar(str(destino))
+    resumo = analisar(str(destino), job.ctx)
     resumo["arquivo"] = arquivo.filename
     job.processos.append(resumo)
     return JSONResponse(resumo)

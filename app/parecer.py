@@ -152,11 +152,20 @@ def gerar(job) -> dict:
     else:
         itens = []
         for pr in procs:
-            val = pr.get("valor_maximo") or 0
-            extra = f", com débito/valor de causa de {_reais(val)}" if val else ""
-            riscos = ", ".join(pr.get("riscos") or []) or "a classificar"
-            itens.append(f"Processo nº {pr.get('numero') or 's/ número'} ({riscos}){extra}")
-        t_proc = "Foram localizados os seguintes processos: " + "; ".join(itens) + "."
+            cab = f"Processo nº {pr.get('numero') or 's/ número'} — {pr.get('classe') or 'Processo'}"
+            if pr.get("assunto"):
+                cab += f" (objeto: {pr['assunto']})"
+            det = []
+            if pr.get("papel_dd"):
+                det.append(pr["papel_dd"].rstrip("."))
+            if pr.get("valor_maximo"):
+                det.append(f"valor/débito de {_reais(pr['valor_maximo'])}")
+            if pr.get("situacao"):
+                det.append(f"situação atual: {pr['situacao']}")
+            if pr.get("sentenca"):
+                det.append(f"sentença: {pr['sentenca'].get('resultado')}")
+            itens.append(cab + (". " + "; ".join(det) + "." if det else "."))
+        t_proc = "Foram localizados os seguintes processos: " + " ".join(itens)
 
     if prot_classe == "negativa":
         t_prot = f"Não há registros de títulos protestados em nome {de_quem}."
