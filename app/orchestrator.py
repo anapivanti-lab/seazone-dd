@@ -94,7 +94,8 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
                 status, msg = "aguardando", "Automático — emitido ao iniciar (sem captcha)."
             else:
                 sob_demanda = True
-                status, msg = "aguardando", "Clique em 'Abrir site' para abrir e preencher."
+                base = "Clique em 'Abrir site' para abrir e preencher."
+                status, msg = "aguardando", (f"{it.obs} {base}" if it.obs else base)
         else:
             status, msg = "aguardando", ""
         passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url,

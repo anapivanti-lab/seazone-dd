@@ -141,12 +141,20 @@ def itens_para(ctx) -> list[Item]:
     tj = TJ.get(uf)
     _tj_auto = {
         ("BA", "Cível 1º grau"): "Justiça Estadual BA — Cível 1º grau",
+        ("BA", "Criminal 1º grau"): "Justiça Estadual BA — Criminal 1º grau",
+        ("BA", "Cível 2º grau"): "Justiça Estadual BA — Cível 2º grau",
+        ("BA", "Criminal 2º grau"): "Justiça Estadual BA — Criminal 2º grau",
         ("GO", "Criminal 1º grau"): "Justiça Estadual GO — Criminal (antecedentes)",
+    }
+    _tj_obs = {
+        ("BA", "Cível 2º grau"): "Preenche tudo; falta só o nº da certidão de 1º grau (você cola).",
+        ("BA", "Criminal 2º grau"): "Preenche tudo; falta só o nº da certidão de 1º grau (você cola).",
     }
     for g in _GRAUS:
         prov = _tj_auto.get((uf, g))
         if prov:
-            itens.append(Item(f"Justiça Estadual — {g}", "Justiça Estadual", modo="auto", provider=prov))
+            itens.append(Item(f"Justiça Estadual — {g}", "Justiça Estadual", modo="auto",
+                              provider=prov, obs=_tj_obs.get((uf, g), "")))
         else:
             itens.append(_loc(f"Justiça Estadual — {g}", "Justiça Estadual", tj, uf_ok, "UF", f"TJ de {onde_uf}"))
 
@@ -155,12 +163,19 @@ def itens_para(ctx) -> list[Item]:
     _trf1_ufs = {"BA", "DF", "GO", "MG", "MT", "MA", "PI", "PA", "AM", "AC", "AP", "RO", "RR", "TO"}
     _trf1_auto = {
         "Cível 1º grau": "Justiça Federal TRF1 — Cível",
+        "Cível 2º grau": "Justiça Federal TRF1 — Cível",
         "Criminal 1º grau": "Justiça Federal TRF1 — Criminal",
+        "Criminal 2º grau": "Justiça Federal TRF1 — Criminal",
+    }
+    _trf1_obs = {
+        "Cível 2º grau": "A certidão do TRF cobre 1º e 2º grau (é a mesma da Cível 1º grau).",
+        "Criminal 2º grau": "A certidão do TRF cobre 1º e 2º grau (é a mesma da Criminal 1º grau).",
     }
     for g in _GRAUS:
         prov = _trf1_auto.get(g) if uf in _trf1_ufs else None
         if prov:
-            itens.append(Item(f"Justiça Federal — {g}", "Justiça Federal", modo="auto", provider=prov))
+            itens.append(Item(f"Justiça Federal — {g}", "Justiça Federal", modo="auto",
+                              provider=prov, obs=_trf1_obs.get(g, "")))
         else:
             itens.append(_loc(f"Justiça Federal — {g}", "Justiça Federal", trf, uf_ok, "UF", f"TRF de {onde_uf}"))
 
