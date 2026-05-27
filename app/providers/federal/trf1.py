@@ -48,13 +48,14 @@ class TRF1Civel(BaseProvider):
         await page.wait_for_timeout(1500)
         await _t(lambda: page.click(f"mat-option:has-text('{kw}')", timeout=4000))
         await page.wait_for_timeout(600)
-        # CPF/CNPJ
+        # CPF/CNPJ — mat-radio-2 = CPF, mat-radio-3 = CNPJ
         if ctx.tipo == TipoPessoa.PJ:
-            await _t(lambda: page.click("label:has-text('CNPJ')", timeout=3000),
-                     lambda: page.click("mat-radio-button:has-text('CNPJ')", timeout=3000),
-                     lambda: page.click("text=CNPJ", timeout=2500))
+            await _t(lambda: page.click("#mat-radio-3", timeout=4000))
+            await page.wait_for_timeout(800)
+            await _t(lambda: page.fill("input[formcontrolname='cnpj']", ctx.documento, timeout=4000),
+                     lambda: page.fill("#mat-input-0", ctx.documento, timeout=3000))
+        else:
+            await _t(lambda: page.click("#mat-radio-2", timeout=4000))
             await page.wait_for_timeout(500)
-        # Documento
-        await _t(lambda: page.fill("input[formcontrolname='cnpj']", ctx.documento, timeout=3000),
-                 lambda: page.fill("input[formcontrolname='cpf']", ctx.documento, timeout=3000),
-                 lambda: page.fill("#mat-input-0", ctx.documento, timeout=3000))
+            await _t(lambda: page.fill("input[formcontrolname='cpf']", ctx.documento, timeout=4000),
+                     lambda: page.fill("#mat-input-0", ctx.documento, timeout=3000))

@@ -67,9 +67,12 @@ JOBS: dict[str, Job] = {}
 
 def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
     selecionados = selecionados or []
-    dados = consultar_cnpj(ctx.documento)  # dados grátis do CNPJ (CNAE, situação, sócios)
-    if dados and not ctx.nome and dados.get("razao_social"):
-        ctx.nome = dados["razao_social"]
+    dados = consultar_cnpj(ctx.documento)  # dados grátis do CNPJ (CNAE, situação, sócios, endereço)
+    if dados:
+        if not ctx.nome and dados.get("razao_social"):
+            ctx.nome = dados["razao_social"]
+        if not ctx.endereco and dados.get("endereco"):
+            ctx.endereco = dados["endereco"]
     ctx.pasta_saida = preparar_pasta(ctx)
     passos = []
     for it in itens_para(ctx):
@@ -136,6 +139,8 @@ def _ligar_captura(page, prov, passo, ctx):
             passo.mensagem = f"Baixou, mas falhou ao salvar: {e}"
 
     page.on("download", lambda d: asyncio.ensure_future(salvar(d)))
+    # captura também downloads que abrem em aba/janela nova (ex.: TST)
+    page.on("popup", lambda p: p.on("download", lambda d: asyncio.ensure_future(salvar(d))))
 
 
 async def executar_job(job: Job) -> None:

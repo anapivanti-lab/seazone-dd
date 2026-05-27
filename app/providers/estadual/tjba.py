@@ -64,8 +64,14 @@ class TJBACivel1(BaseProvider):
         )
         await page.wait_for_timeout(500)
 
-        # Tenta avançar/gerar (se o reCAPTCHA invisível deixar)
+        # Avança para a 2ª tela
         await _tentar(
             lambda: page.click("button:has-text('Avançar')", timeout=4000),
             lambda: page.click("input[value*='Avan']", timeout=3000),
         )
+        await page.wait_for_timeout(3500)
+        # 2ª tela (PJ): Razão Social, CNPJ e Endereço Completo
+        if ctx.tipo == TipoPessoa.PJ:
+            await _tentar(lambda: page.fill("#razaoSocial", ctx.nome, timeout=4000))
+            await _tentar(lambda: page.fill("#cnpj", ctx.documento, timeout=4000))
+            await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=4000))

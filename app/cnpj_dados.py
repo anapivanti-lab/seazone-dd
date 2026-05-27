@@ -29,5 +29,11 @@ def consultar(cnpj: str) -> dict | None:
         "situacao": (d.get("descricao_situacao_cadastral") or "").upper(),
         "uf": d.get("uf") or "",
         "municipio": d.get("municipio") or "",
+        "endereco": ", ".join(filter(None, [
+            f"{d.get('logradouro', '')} {d.get('numero', '')}".strip(),
+            d.get("bairro") or "",
+            f"{d.get('municipio', '')}/{d.get('uf', '')}".strip("/"),
+            (f"CEP {d.get('cep')}" if d.get("cep") else ""),
+        ])),
         "socios": [s.get("nome_socio") for s in (d.get("qsa") or []) if s.get("nome_socio")],
     }
