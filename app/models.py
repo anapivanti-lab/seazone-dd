@@ -37,6 +37,7 @@ class Contexto:
     rg: str = ""                 # RG (certidões judiciais de pessoa física)
     nome_mae: str = ""           # nome da mãe (idem)
     endereco: str = ""           # endereço (idem)
+    data_nascimento: str = ""    # data de nascimento (idem)
     pasta_saida: Optional[Path] = None
 
     def __post_init__(self):
