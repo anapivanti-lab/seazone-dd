@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from .checklist import itens_para
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
+from .parecer import gerar as gerar_parecer
 from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
 from .providers import provedores_para
 from .storage import _slug
@@ -95,6 +96,15 @@ async def ler_processo(job_id: str, arquivo: UploadFile = File(...)):
     resumo["arquivo"] = arquivo.filename
     job.processos.append(resumo)
     return JSONResponse(resumo)
+
+
+@app.post("/parecer/{job_id}")
+async def parecer(job_id: str):
+    """Gera o parecer de risco (6 critérios) a partir do que foi coletado."""
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    return JSONResponse(gerar_parecer(job))
 
 
 @app.post("/concluir/{job_id}")

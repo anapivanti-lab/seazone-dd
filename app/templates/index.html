@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=8">
+  <link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
   <header>
@@ -64,13 +64,15 @@
       </fieldset>
 
       <div class="acoes" id="acoes" hidden>
-        <button type="button" id="concluir">Concluir e gerar relatório</button>
+        <button type="button" id="parecer">⚖️ Gerar parecer de risco</button>
+        <button type="button" id="concluir" class="secundario">Concluir e gerar relatório</button>
         <button type="button" id="abrirPasta" class="secundario">Abrir pasta dos PDFs</button>
       </div>
+      <div id="parecerBox"></div>
       <p id="pasta" class="pasta"></p>
     </section>
   </main>
 
-  <script src="/static/app.js?v=8"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 </html>
