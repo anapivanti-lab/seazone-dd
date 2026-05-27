@@ -111,14 +111,14 @@ def itens_para(ctx) -> list[Item]:
     onde_mun = ctx.municipio or "seu município"
 
     itens: list[Item] = [
-        Item("CND Federal (Receita/PGFN)", "Federais", modo="abrir", url=_RECEITA_CND),
+        Item("CND Federal (Receita/PGFN)", "Federais", modo="auto", provider="CND Federal (Receita/PGFN)"),
         Item("CND Trabalhista (TST)", "Federais", modo="auto", provider="CND Trabalhista (TST)"),
         Item("Certidão de Protestos (CENPROT)", "Federais", modo="abrir",
              url="https://www.pesquisaprotesto.com.br/servico/consulta-documento"),
     ]
     if pj:
         itens.append(Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais",
-                           modo="abrir", url=_RECEITA_CARTAO))
+                           modo="auto", provider="Cartão CNPJ (Comprovante de Inscrição)"))
 
     uf_ok = bool(uf)
     muni_ok = bool(muni)
