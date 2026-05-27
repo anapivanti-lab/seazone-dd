@@ -28,6 +28,14 @@ def provedores_para(ctx: Contexto) -> list["BaseProvider"]:
     return [p for p in _PROVEDORES if p.disponivel_para(ctx)]
 
 
+def provedor_por_nome(nome: str):
+    """Acha um provedor registrado pelo seu nome (ou None)."""
+    for p in _PROVEDORES:
+        if p.nome == nome:
+            return p
+    return None
+
+
 class BaseProvider:
     nome: str = "Certidão"
     nivel: str = "federal"        # federal | nacional | estadual | municipal

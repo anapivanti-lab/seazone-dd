@@ -3,9 +3,8 @@
 __pycache__/
 *.pyc
 
-# Dados sensíveis (certidões e processos de pessoas reais) — NÃO versionar
-dados/saida/
-dados/processos/
+# Dados sensíveis e perfil do navegador — NÃO versionar
+dados/
 
 # Configurações locais
 .env

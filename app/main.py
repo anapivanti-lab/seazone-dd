@@ -5,14 +5,15 @@ import asyncio
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .models import Contexto, TipoPessoa
-from .orchestrator import JOBS, concluir_job, criar_job, executar_job
+from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
 from .providers import provedores_para
+from .storage import _slug
 
 BASE = Path(__file__).parent
 app = FastAPI(title="DD Franquias — Seazone")
@@ -27,7 +28,7 @@ async def home(request: Request):
 
 @app.get("/provedores")
 async def provedores(tipo: str):
-    """Lista as certidões disponíveis para o tipo (PJ/PF) — alimenta as caixinhas."""
+    """Certidões com automação (alimenta as caixinhas de 'abrir site')."""
     ctx = Contexto(tipo=TipoPessoa(tipo), documento="0")
     return JSONResponse([p.nome for p in provedores_para(ctx)])
 
@@ -45,6 +46,26 @@ async def emitir(
     job = criar_job(ctx, selecionados)
     asyncio.create_task(executar_job(job))
     return JSONResponse({"job_id": job.id})
+
+
+@app.post("/upload/{job_id}")
+async def upload(job_id: str, item: str = Form(...), arquivo: UploadFile = File(...)):
+    """Sobe manualmente o PDF de um documento e registra na checklist."""
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    conteudo = await arquivo.read()
+    ext = Path(arquivo.filename or "").suffix or ".pdf"
+    destino = job.ctx.pasta_saida / f"{_slug(item)}{ext}"
+    destino.write_bytes(conteudo)
+    passo = next((p for p in job.passos if p.nome == item), None)
+    if passo is None:
+        passo = Passo(nome=item, grupo="Outros documentos", auto=False)
+        job.passos.append(passo)
+    passo.status = "enviado"
+    passo.arquivo = str(destino)
+    passo.mensagem = f"Enviado: {arquivo.filename}"
+    return JSONResponse(job.to_dict())
 
 
 @app.post("/concluir/{job_id}")

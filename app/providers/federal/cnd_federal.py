@@ -11,4 +11,6 @@ class CNDFederal(BaseProvider):
     nome = "CND Federal (Receita/PGFN)"
     nome_arquivo = "CND_Federal"
     URL = "https://servicos.receitafederal.gov.br/servico/certidoes/"
-    SELETOR = "input[type='text'], input"
+    # O campo do CNPJ fica DENTRO do app (aparece depois de avançar), não na
+    # página inicial. Por isso não preenchemos aqui (evita digitar na busca geral).
+    SELETOR = ""

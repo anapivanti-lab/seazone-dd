@@ -9,5 +9,7 @@ class Protestos(BaseProvider):
     nome = "Certidão de Protestos (CENPROT)"
     nome_arquivo = "Protestos_CENPROT"
     nivel = "nacional"
-    URL = "https://www.pesquisaprotesto.com.br/"
-    SELETOR = "input[name*='documento'], input[type='text']"
+    # Consulta nacional GRATUITA e SEM cadastro (o login só é exigido para
+    # emitir a certidão detalhada). Vamos direto na página de consulta.
+    URL = "https://www.pesquisaprotesto.com.br/servico/consulta-documento"
+    SELETOR = "#cpf_cnpj, input[type='text']"

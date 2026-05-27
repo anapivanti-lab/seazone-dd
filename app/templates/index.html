@@ -9,7 +9,7 @@
 <body>
   <header>
     <h1>Due Diligence de Franquias</h1>
-    <p class="sub">Emissão automática de certidões — Seazone Jurídico</p>
+    <p class="sub">Painel de certidões — Seazone Jurídico</p>
   </header>
 
   <main>
@@ -38,21 +38,29 @@
       </div>
 
       <fieldset id="certidoes-box">
-        <legend>Certidões a emitir</legend>
+        <legend>Sites para abrir automaticamente</legend>
         <div id="certidoes" class="certidoes">carregando…</div>
       </fieldset>
 
-      <button type="submit">Iniciar emissão</button>
+      <button type="submit">Iniciar</button>
     </form>
 
     <section id="painel" hidden>
-      <h2>Andamento <span id="estado" class="tag"></span></h2>
-      <p class="dica">⏳ Nas abas que abriram, <b>resolva o captcha</b> e clique em consultar/emitir.
-        Cada PDF baixado é salvo sozinho. Quando terminar tudo, clique em <b>Concluir</b>.</p>
-      <table id="tabela">
-        <thead><tr><th>Status</th><th>Certidão</th><th>Observação</th><th>PDF</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <h2>Checklist da Due Diligence <span id="estado" class="tag"></span></h2>
+      <p class="dica">📂 As certidões com automação abriram em abas — <b>resolva o captcha</b> e
+        clique em emitir; o PDF é salvo sozinho. Os demais documentos você <b>envia o PDF</b> aqui.</p>
+
+      <div id="checklist"></div>
+
+      <fieldset class="outro">
+        <legend>Adicionar outro documento</legend>
+        <div class="linha">
+          <input id="outroNome" class="cresce" placeholder="Nome do documento (ex.: Procuração)">
+          <input id="outroFile" type="file" accept="application/pdf,image/*">
+          <button type="button" id="btnOutro" class="secundario">Adicionar</button>
+        </div>
+      </fieldset>
+
       <div class="acoes">
         <button type="button" id="concluir" hidden>Concluir e gerar relatório</button>
         <button type="button" id="abrirPasta" class="secundario">Abrir pasta dos PDFs</button>
