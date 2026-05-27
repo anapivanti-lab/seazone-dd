@@ -1,8 +1,7 @@
 """Certidão da Justiça Estadual da Bahia (TJBA) — 1º grau, modelo Cível.
 
-Fluxo: tipo pessoa → modelo (Cível) → participação Ambas → CPF/CNPJ.
-OBS: a página tem um reCAPTCHA (possivelmente invisível); se ele bloquear o
-navegador automático, você conclui na tela (o preenchimento já estará feito).
+Fluxo (calibrado): tipo pessoa → Modelo Cível → participação Ambas → CPF/CNPJ
+→ Avançar. A página tem reCAPTCHA (invisível); se barrar, você conclui na tela.
 """
 from ..base import BaseProvider, registrar
 from ...models import TipoPessoa
@@ -29,29 +28,44 @@ class TJBACivel1(BaseProvider):
     async def abrir(self, ctx, page):
         await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
         await page.wait_for_timeout(4000)
-        pj = ctx.tipo == TipoPessoa.PJ
+        pessoa = "Jurídica" if ctx.tipo == TipoPessoa.PJ else "Física"
 
         await _tentar(
-            lambda: page.click("#radioJuridica" if pj else "#radioFisica", timeout=4000),
-            lambda: page.click("text=Jurídica" if pj else "text=Física", timeout=3000),
-        )
-        await page.wait_for_timeout(600)
-        await _tentar(
-            lambda: page.click("#selectModelo", timeout=4000),
-            lambda: page.click("mat-select", timeout=3000),
+            lambda: page.click(f"label:has-text('{pessoa}')", timeout=5000),
+            lambda: page.click(f"text={pessoa}", timeout=3000),
         )
         await page.wait_for_timeout(700)
-        await _tentar(
-            lambda: page.click("mat-option:has-text('Cível')", timeout=3000),
-            lambda: page.click("text=Certidão Cível", timeout=3000),
+
+        # Modelo "Certidão Cível" — tenta select nativo; se não, abre e clica a opção
+        modelo_ok = await _tentar(
+            lambda: page.select_option("#selectModelo", label="Certidão Cível"),
         )
-        await page.wait_for_timeout(500)
+        if not modelo_ok:
+            await _tentar(lambda: page.click("#selectModelo", timeout=3000),
+                          lambda: page.click("mat-select", timeout=3000))
+            await page.wait_for_timeout(800)
+            await _tentar(
+                lambda: page.click("mat-option:has-text('Cível')", timeout=3000),
+                lambda: page.click(".mat-option:has-text('Cível')", timeout=3000),
+                lambda: page.click("text=Certidão Cível", timeout=3000),
+            )
+        await page.wait_for_timeout(600)
+
         await _tentar(
-            lambda: page.click("#radioAmbas", timeout=3000),
+            lambda: page.click("label:has-text('Ambas')", timeout=3000),
             lambda: page.click("text=Ambas", timeout=3000),
         )
-        await page.wait_for_timeout(400)
+        await page.wait_for_timeout(500)
+
         await _tentar(
             lambda: page.fill("#mat-input-0", ctx.documento, timeout=4000),
-            lambda: page.fill("input[type='text']", ctx.documento, timeout=3000),
+            lambda: page.fill("input[placeholder*='CNPJ']", ctx.documento, timeout=3000),
+            lambda: page.fill("input[placeholder*='CPF']", ctx.documento, timeout=3000),
+        )
+        await page.wait_for_timeout(500)
+
+        # Tenta avançar/gerar (se o reCAPTCHA invisível deixar)
+        await _tentar(
+            lambda: page.click("button:has-text('Avançar')", timeout=4000),
+            lambda: page.click("input[value*='Avan']", timeout=3000),
         )

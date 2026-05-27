@@ -19,6 +19,17 @@ async def salvar_download(download, ctx, nome_base: str) -> Path:
     sufixo = Path(download.suggested_filename).suffix or ".pdf"
     destino = caminho_saida(ctx, nome_base, sufixo)
     await download.save_as(str(destino))
+    # Alguns sites baixam o PDF sem extensão / com extensão errada — se o
+    # conteúdo for PDF, garante que o arquivo termine em .pdf (pra abrir normal).
+    try:
+        with open(destino, "rb") as f:
+            cabecalho = f.read(5)
+        if cabecalho.startswith(b"%PDF") and destino.suffix.lower() != ".pdf":
+            novo = destino.with_suffix(".pdf")
+            destino.replace(novo)
+            destino = novo
+    except Exception:
+        pass
     return destino
 
 
