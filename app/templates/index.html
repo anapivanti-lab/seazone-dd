@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=11">
+  <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
   <header>
@@ -40,6 +40,13 @@
           <label>Data de nascimento<input name="data_nascimento" placeholder="dd/mm/aaaa"></label>
         </div>
         <label>Endereço<input name="endereco" placeholder="Rua, nº, bairro, cidade" style="width:100%"></label>
+        <div class="linha" style="margin-top:.6rem">
+          <label class="cresce">📷 Ler do RG/CNH (imagem ou PDF) — preenche RG, nome da mãe e nascimento
+            <input id="idFile" type="file" accept="image/*,application/pdf">
+          </label>
+          <button type="button" id="btnId" class="secundario">Ler identidade</button>
+        </div>
+        <span id="idStatus" class="obs"></span>
       </details>
 
       <button type="submit">Iniciar</button>
@@ -84,6 +91,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>

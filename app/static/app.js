@@ -10,6 +10,28 @@ const btnAbrirPasta = document.getElementById("abrirPasta");
 const btnParecer = document.getElementById("parecer");
 const parecerBox = document.getElementById("parecerBox");
 const cnpjBox = document.getElementById("cnpjBox");
+const btnId = document.getElementById("btnId");
+const idFile = document.getElementById("idFile");
+const idStatus = document.getElementById("idStatus");
+
+if (btnId) {
+  btnId.addEventListener("click", async () => {
+    if (!idFile.files[0]) return;
+    idStatus.textContent = "Lendo a imagem…";
+    const fd = new FormData();
+    fd.append("arquivo", idFile.files[0]);
+    const r = await fetch("/ler-identidade", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!d.ok) {
+      idStatus.textContent = d.erro || "Falha na leitura.";
+      return;
+    }
+    if (d.rg) form.rg.value = d.rg;
+    if (d.nome_mae) form.nome_mae.value = d.nome_mae;
+    if (d.data_nascimento) form.data_nascimento.value = d.data_nascimento;
+    idStatus.textContent = "Lido! Confira RG, nome da mãe e nascimento.";
+  });
+}
 const btnOutro = document.getElementById("btnOutro");
 const outroNome = document.getElementById("outroNome");
 const outroFile = document.getElementById("outroFile");

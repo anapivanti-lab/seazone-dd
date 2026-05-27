@@ -124,7 +124,14 @@ Depois, ao abrir esses sites, o navegador mostra um aviso para **selecionar o
 certificado** — escolha o da empresa. O arquivo `.pfx` e a senha **nunca** devem
 ir para o repositório (já estão no `.gitignore`).
 
-## 7. Avisos
+## 7. Leitor de identidade (OCR) — opcional
+
+Para o sistema ler **RG, nome da mãe e data de nascimento** de uma imagem do
+RG/CNH, instale o **Tesseract OCR** (gratuito):
+`winget install UB-Mannheim.TesseractOCR` (ou baixe em
+https://github.com/UB-Mannheim/tesseract/wiki). Sem ele, basta digitar os campos.
+
+## 8. Avisos
 
 - Os PDFs ficam **só na sua máquina** (`dados\saida`), não vão para a internet.
 - A pasta `dados\` está fora do controle de versão (Git) por conter dados

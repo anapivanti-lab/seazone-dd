@@ -11,8 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .checklist import itens_para
+from .config import PASTA_PROCESSOS
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
+from .ocr import ler as ler_identidade
 from .parecer import gerar as gerar_parecer
 from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
 from .providers import provedores_para
@@ -111,6 +113,16 @@ async def parecer(job_id: str):
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
     return JSONResponse(gerar_parecer(job))
+
+
+@app.post("/ler-identidade")
+async def ler_identidade_ep(arquivo: UploadFile = File(...)):
+    """Lê (OCR) uma imagem de RG/CNH e devolve RG, nome da mãe e nascimento."""
+    conteudo = await arquivo.read()
+    nome = arquivo.filename or "identidade.png"
+    tmp = PASTA_PROCESSOS / ("_id_" + _slug(Path(nome).stem) + (Path(nome).suffix or ".png"))
+    tmp.write_bytes(conteudo)
+    return JSONResponse(ler_identidade(str(tmp)))
 
 
 @app.post("/concluir/{job_id}")
