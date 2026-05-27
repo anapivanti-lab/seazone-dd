@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=28">
+  <link rel="stylesheet" href="/static/style.css?v=29">
 </head>
 <body>
   <header>
@@ -29,10 +29,15 @@
           <select name="papel" id="papel"></select>
         </label>
         <input type="hidden" name="tipo" id="tipo">
-        <label class="cresce">📎 Anexe o <b id="docLabel">Cartão CNPJ</b> (imagem ou PDF)
+      </div>
+      <div class="upload-zona">
+        <div class="upload-info">📎 Anexe o <b id="docLabel">Cartão CNPJ</b>
+          <span class="obs">— imagem ou PDF; o sistema lê e preenche os campos abaixo.</span>
+        </div>
+        <div class="upload-acao">
           <input id="docFile" type="file" accept="image/*,application/pdf">
-        </label>
-        <button type="button" id="btnLer" class="secundario">Ler documento</button>
+          <button type="button" id="btnLer" class="secundario">Ler documento</button>
+        </div>
       </div>
       <p id="lerStatus" class="obs">Anexe o documento e o sistema preenche os dados abaixo —
         você só completa o que não der pra ler e o endereço.</p>
@@ -119,6 +124,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=28"></script>
+  <script src="/static/app.js?v=29"></script>
 </body>
 </html>

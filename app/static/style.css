@@ -63,6 +63,26 @@ input[type="file"]::file-selector-button {
 input[type="file"]::file-selector-button:hover { filter: brightness(1.05); }
 .linha button { height: 42px; padding: 0 1.2rem; white-space: nowrap; }
 input[type="checkbox"] { height: auto; width: auto; }
+
+/* Área de anexo do documento — destacada, largura total */
+.upload-zona {
+  border: 2px dashed #b9c6d1;
+  background: #f4f8fb;
+  border-radius: 10px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.2rem;
+}
+.upload-info { font-size: 1rem; font-weight: 600; margin-bottom: .7rem; }
+.upload-info b { color: var(--azul); }
+.upload-acao { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.upload-acao input[type="file"] {
+  flex: 1;
+  min-width: 260px;
+  height: 46px;
+  border: 1px solid #cfd8e0;
+  background: #fff;
+}
+.upload-acao button { height: 46px; padding: 0 1.4rem; white-space: nowrap; }
 button {
   background: var(--azul);
   color: #fff;
