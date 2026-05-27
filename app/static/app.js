@@ -82,8 +82,6 @@ async function lerDocumento() {
   buscarMunicipal();
 }
 
-tipoSel.addEventListener("change", ajustarTipo);
-ajustarTipo();
 if (btnLer) btnLer.addEventListener("click", lerDocumento);
 if (docFile) docFile.addEventListener("change", lerDocumento);
 const btnOutro = document.getElementById("btnOutro");
