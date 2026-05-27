@@ -128,6 +128,9 @@ def itens_para(ctx) -> list[Item]:
         "BA": "CND Estadual (Fazenda) — BA",
         "SC": "CND Estadual (Fazenda) — SC",
         "SP": "CND Estadual (Fazenda) — SP",
+        "RS": "CND Estadual (Fazenda) — RS",
+        "PE": "CND Estadual (Fazenda) — PE",
+        "MS": "CND Estadual (Fazenda) — MS",
     }
     if uf in _sefaz_auto:
         itens.append(Item("CND Estadual (Fazenda)", "Estaduais", modo="auto", provider=_sefaz_auto[uf]))
