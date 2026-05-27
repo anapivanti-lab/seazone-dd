@@ -23,7 +23,9 @@ templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    resp = templates.TemplateResponse(request, "index.html")
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"  # sempre versão atual
+    return resp
 
 
 @app.get("/provedores")
