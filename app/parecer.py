@@ -16,7 +16,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .leitor import _extrair_texto
+from .extrator import _texto_documento
 from .pep import checar as checar_pep
 
 LIMITE_DEBITO = 10000.0  # abaixo disso = achado leve; acima = risco real
@@ -56,9 +56,16 @@ def _data_extenso() -> str:
 
 
 def _classificar(caminho: str) -> str:
-    t = _extrair_texto(caminho).lower()
+    t = _texto_documento(caminho).lower()  # lê PDF e também imagem (via OCR)
     if not t.strip():
         return "indeterminado"
+    # Comunicado da Receita Federal: quando a CND é POSITIVA não sai a certidão —
+    # sai o aviso "informações insuficientes para emitir a certidão". Isso = positiva
+    # (há pendência); a franquia precisa regularizar e esclarecer.
+    if any(k in t for k in ("insuficientes para emitir", "não foi possível emitir",
+                            "nao foi possivel emitir", "não é possível emitir",
+                            "nao e possivel emitir", "insuficientes para emitir a certidão")):
+        return "positiva"
     if "positiva com efeito" in t or "positiva com efeitos" in t:
         return "negativa"
     if any(k in t for k in ("nada consta", "não constam", "nao constam", "negativ", "inexist")):
@@ -70,7 +77,7 @@ def _classificar(caminho: str) -> str:
 
 def _valor_protestos(caminho: str) -> float:
     vals = []
-    for m in re.findall(r"R\$\s*([\d.]+,\d{2})", _extrair_texto(caminho)):
+    for m in re.findall(r"R\$\s*([\d.]+,\d{2})", _texto_documento(caminho)):
         try:
             vals.append(float(m.replace(".", "").replace(",", ".")))
         except Exception:
@@ -183,9 +190,10 @@ def gerar(job) -> dict:
     def recs(grave: bool):
         out = []
         if positivas:
-            out.append("Regularizar a situação fiscal, com o pagamento dos débitos perante a Receita Federal "
-                       "e a reversão da(s) certidão(ões) positiva(s)" if grave
-                       else "a reversão da(s) certidão(ões) positiva(s)")
+            out.append("Regularizar a situação fiscal junto à Receita Federal e esclarecer/reverter a(s) "
+                       "certidão(ões) positiva(s) (quando a CND federal é positiva, a Receita não emite a "
+                       "certidão e exibe aviso de informações insuficientes)" if grave
+                       else "a regularização e o esclarecimento da(s) certidão(ões) positiva(s)")
         if procs:
             v = f" (débito/valor não atualizado de {_reais(total_proc)})" if total_proc else ""
             out.append(f"Regularização da situação financeira decorrente das ações judiciais{v}" if grave
