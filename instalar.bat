@@ -34,6 +34,12 @@ if not exist "dados\tessdata\por.traineddata" (
 )
 if not exist "dados\tessdata\eng.traineddata" if exist "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" copy "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" "dados\tessdata\eng.traineddata" >nul
 
+echo [5/5] (Opcional) IA local para resumir processos em linguagem simples (Ollama)...
+where winget >nul 2>nul && (
+    where ollama >nul 2>nul || winget install --id Ollama.Ollama -e --silent --accept-package-agreements --accept-source-agreements
+    powershell -NoProfile -Command "$env:Path += ';' + $env:LOCALAPPDATA + '\Programs\Ollama'; try { ollama pull llama3.2:3b } catch { Write-Host '[aviso] Sem a IA local o sistema usa o resumo por regras (funciona normal).' }"
+) || echo [aviso] winget ausente — IA local opcional nao instalada (o sistema usa resumo por regras).
+
 echo.
 echo ============================================
 echo   Instalacao concluida!
