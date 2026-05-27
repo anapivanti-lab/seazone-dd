@@ -89,6 +89,7 @@ MUNICIPAL = {
         "PJ": "https://www2.sefaz.salvador.ba.gov.br/servico/certidao-regularidade-fiscal-pj",
         "PF": "https://www2.sefaz.salvador.ba.gov.br/servico/certidao-regularidade-fiscal-pf",
     },
+    "mata de sao joao": "https://matadesaojoao.atendimento.admsistemas.app.br/emitir-certidao?tipoCertidao=1",
 }
 
 _GRAUS = ["Cível 1º grau", "Cível 2º grau", "Criminal 1º grau", "Criminal 2º grau"]
