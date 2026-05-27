@@ -83,6 +83,48 @@ def _valor_protestos(caminho: str) -> float:
     return sum(vals)
 
 
+def _fatos_curto(fatos: str, limite: int = 820) -> str:
+    """Resumo objetivo dos fatos para o parecer: remove o 'Consta...' inicial, o
+    juridiquês mais pesado e citações/coordenadas, e limita a poucas frases-chave."""
+    if not fatos:
+        return ""
+    t = re.sub(r"^\s*Consta d[oa][^,]{0,45},\s*", "", fatos, flags=re.I)
+    t = re.sub(r"^\s*Consta que,?\s*", "", t, flags=re.I)
+    for a, b in [
+        (r"em comunh[ãa]o de esfor[çc]os e unidade de des[íi]gnios com", "em conjunto com"),
+        (r",?\s*aderindo [àa] conduta inicial daquele,?", ""),
+        (r"\s*e?\s*agindo com animus rem sibi habendi\s*\([^)]*\)", ""),
+        (r"inverteram o t[íi]tulo da posse", "ficaram com o bem indevidamente"),
+        (r"promove[a-z]+ a desconex[ãa]o do", "desconectaram o"),
+        (r"deixando de restituir o autom[óo]vel", "não devolvendo o veículo"),
+        (r"\(localizado nas coordenadas[^)]*\)?", ""),
+        (r"\((?:evento|fls?\.|p\.|INQ|n\.|seq|art)[^)]*\)?", ""),
+        (r",?\s*de placas? [A-Z0-9-]+", ""),
+        (r"\bpel[oa]s? denunciad[oa]s?\b", "por"),
+        (r"\bos? denunciados?\b", ""),
+        (r"\ba denunciada\b", ""),
+        (r"consumando-se a apropriação do bem alheio móvel de que detinham a posse",
+         "consumando-se a apropriação do veículo"),
+        (r"\s*\(\s*$", ""),
+        (r"habilita[çc][ãa]o\d", "habilitação"),
+    ]:
+        t = re.sub(a, b, t, flags=re.I)
+    t = re.sub(r"\s+", " ", t).strip()
+    frases = re.split(r"(?<=[.;])\s+", t)
+    # mantém a 1ª frase (contexto) + as frases-chave (o que de fato aconteceu),
+    # descartando enrolação — assim o resumo é curto mas pega o essencial.
+    CHAVE = ("não dev", "nao dev", "restitu", "apropria", "rastreador", "desconect", "recuper",
+             "polícia", "policia", "flagrante", "devolv", "posse indevida", "subtra", "furt", "estelionat")
+    sel = [fr for i, fr in enumerate(frases) if i == 0 or any(k in fr.lower() for k in CHAVE)]
+    out = " ".join(sel or frases[:3])
+    out = re.sub(r"\s+([,.;])", r"\1", re.sub(r"\s{2,}", " ", out)).strip(" ,;")
+    if out:
+        out = out[0].upper() + out[1:]
+        if not out.endswith((".", "…")):
+            out += "."
+    return out
+
+
 def _qual_franquia(ctx, dados) -> str:
     sede = ctx.endereco or dados.get("endereco") or "endereço não informado"
     return (f"{ctx.nome or 'Razão social não informada'}, pessoa jurídica de direito privado, "
@@ -169,11 +211,9 @@ def _analisar_entidade(job) -> dict:
                 frase += f"Valor/débito de {_reais(pr['valor_maximo'])}. "
             if pr.get("sentenca"):
                 frase += f"Desfecho: {pr['sentenca'].get('resultado')}. "
-            elif pr.get("situacao"):
-                frase += f"Situação atual: {pr['situacao']}. "
-            fatos = (pr.get("fatos") or "").strip()
+            fatos = _fatos_curto(pr.get("fatos") or "")
             if fatos:
-                frase += "Em síntese dos fatos, " + (fatos[:700].rstrip() + "…" if len(fatos) > 700 else fatos)
+                frase += fatos
             itens.append(frase.strip())
         t_proc = " ".join(itens)
 
