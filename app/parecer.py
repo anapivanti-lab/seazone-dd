@@ -178,7 +178,7 @@ def _analisar_entidade(job) -> dict:
     qual = _qual_franquia(ctx, dados) if pj else _qual_operador(ctx, dados)
     return {
         "papel": papel, "ordem": _ORDEM.get(papel, 3), "tipo": ctx.tipo.value,
-        "qualificacao": qual,
+        "nome": ctx.nome, "qualificacao": qual,
         "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
         "docs": [p.nome for p in job.passos if p.arquivo] + [f"Processo: {pr.get('arquivo', '')}" for pr in procs],
         "positivas": positivas, "prot_positiva": prot_positiva, "crim": crim, "procs": bool(procs),
@@ -282,7 +282,8 @@ def gerar(job) -> dict:
             if x not in docs:
                 docs.append(x)
 
-    titulo = (ctx.operador or ctx.nome or ctx.documento)
+    titulo = (next((e.get("nome") for e in entidades if "operador" in e["papel"].lower() and e.get("nome")), None)
+              or (entidades[0].get("nome") if entidades else None) or ctx.nome or ctx.documento)
     d = {
         "titulo": titulo, "id_suporte": ctx.id_suporte, "entidades": entidades, "docs": docs,
         "risco": concl["risco"], "concl_categoria": concl["categoria"], "concl_texto": concl["texto"],

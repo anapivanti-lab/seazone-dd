@@ -32,13 +32,52 @@ def com_prefixo(ctx, base: str) -> str:
     return f"{pref} - {base}" if pref else base
 
 
+def _sanit(s: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]+', "", s or "").strip()
+
+
+def _nome_pasta(id_s: str, rotulo: str, doc: str) -> str:
+    base = f"#{id_s} - DD - {rotulo}" if id_s else f"DD - {rotulo}"
+    return _sanit(base)[:120] or doc
+
+
 def preparar_pasta(ctx: Contexto) -> Path:
-    """Pasta da DD no padrão do setor: '#<ID Suporte> - DD - <Operador>'.
-    PJ + representante legal + operador compartilham a MESMA pasta (mesmo ID)."""
-    operador = (ctx.operador or ctx.nome or ctx.documento).strip()
-    nome_pasta = f"#{ctx.id_suporte} - DD - {operador}" if ctx.id_suporte else f"DD - {operador}"
-    nome_pasta = re.sub(r'[\\/:*?"<>|]+', "", nome_pasta).strip()[:120] or ctx.documento
-    pasta = base_saida() / nome_pasta
+    """Pasta da DD no padrão '#<ID Suporte> - DD - <Operador>'. PJ + representante
+    legal + operador compartilham a MESMA pasta (mesmo ID Suporte). O nome do
+    operador (que nomeia a pasta) vem do documento de identidade ao processar o
+    papel Operador — então a pasta é reaproveitada pelo ID e renomeada quando o
+    nome do operador é lido."""
+    base = base_saida()
+    id_s = (ctx.id_suporte or "").strip()
+
+    # pasta já existente desta DD (mesmo ID Suporte)?
+    existente = None
+    if id_s:
+        for p in base.glob(f"#{id_s} - DD - *"):
+            if p.is_dir():
+                existente = p
+                break
+
+    # o nome do operador define o nome final; vem do documento (ctx.nome) no papel Operador
+    nome_op = (ctx.operador or "").strip()
+    if "operador" in (ctx.papel or "").lower() and (ctx.nome or "").strip():
+        nome_op = ctx.nome.strip()
+
+    if nome_op:
+        alvo = base / _nome_pasta(id_s, nome_op, ctx.documento)
+        if existente and existente.resolve() != alvo.resolve():
+            try:
+                existente.rename(alvo)  # renomeia para o nome do operador (leva os arquivos)
+                return alvo
+            except Exception:
+                return existente
+        alvo.mkdir(parents=True, exist_ok=True)
+        return alvo
+
+    if existente:
+        return existente
+    # 1ª run sem o operador ainda: nome provisório (renomeado ao processar o operador)
+    pasta = base / _nome_pasta(id_s, (ctx.nome or ctx.documento).strip(), ctx.documento)
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta
 
