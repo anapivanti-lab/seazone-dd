@@ -10,28 +10,55 @@ const btnAbrirPasta = document.getElementById("abrirPasta");
 const btnParecer = document.getElementById("parecer");
 const parecerBox = document.getElementById("parecerBox");
 const cnpjBox = document.getElementById("cnpjBox");
-const btnId = document.getElementById("btnId");
-const idFile = document.getElementById("idFile");
-const idStatus = document.getElementById("idStatus");
+const docFile = document.getElementById("docFile");
+const btnLer = document.getElementById("btnLer");
+const lerStatus = document.getElementById("lerStatus");
+const docLabel = document.getElementById("docLabel");
 
-if (btnId) {
-  btnId.addEventListener("click", async () => {
-    if (!idFile.files[0]) return;
-    idStatus.textContent = "Lendo a imagem…";
-    const fd = new FormData();
-    fd.append("arquivo", idFile.files[0]);
-    const r = await fetch("/ler-identidade", { method: "POST", body: fd });
-    const d = await r.json();
-    if (!d.ok) {
-      idStatus.textContent = d.erro || "Falha na leitura.";
-      return;
-    }
-    if (d.rg) form.rg.value = d.rg;
-    if (d.nome_mae) form.nome_mae.value = d.nome_mae;
-    if (d.data_nascimento) form.data_nascimento.value = d.data_nascimento;
-    idStatus.textContent = "Lido! Confira RG, nome da mãe e nascimento.";
-  });
+// Alterna o rótulo do upload e os campos só de PF conforme o tipo escolhido
+function ajustarTipo() {
+  const pf = tipoSel.value === "PF";
+  if (docLabel) docLabel.textContent = pf ? "documento de identidade (RG/CNH)" : "Cartão CNPJ";
+  document.querySelectorAll(".pfonly").forEach((el) => (el.hidden = !pf));
 }
+
+// Lê o documento anexado (Cartão CNPJ ou identidade) e preenche os campos
+async function lerDocumento() {
+  if (!docFile.files[0]) {
+    lerStatus.textContent = "Anexe o arquivo (imagem ou PDF) primeiro.";
+    return;
+  }
+  lerStatus.textContent = "Lendo o documento… (pode levar alguns segundos)";
+  const fd = new FormData();
+  fd.append("tipo", tipoSel.value);
+  fd.append("arquivo", docFile.files[0]);
+  let d;
+  try {
+    const r = await fetch("/ler-documento", { method: "POST", body: fd });
+    d = await r.json();
+  } catch (e) {
+    lerStatus.textContent = "Falha ao enviar o documento.";
+    return;
+  }
+  const set = (campo, v) => { if (form[campo] && v) form[campo].value = v; };
+  set("documento", d.documento);
+  set("nome", d.nome);
+  set("uf", d.uf);
+  set("municipio", d.municipio);
+  set("endereco", d.endereco);
+  set("rg", d.rg);
+  set("nome_mae", d.nome_mae);
+  set("data_nascimento", d.data_nascimento);
+  lerStatus.textContent = d.ok
+    ? "✅ Li o documento. Confira os campos e complete o que faltar (e o endereço)."
+    : "⚠️ " + (d.erro || "Não consegui ler tudo.") + " Preencha os campos à mão.";
+  carregarChecklist();
+}
+
+tipoSel.addEventListener("change", ajustarTipo);
+ajustarTipo();
+if (btnLer) btnLer.addEventListener("click", lerDocumento);
+if (docFile) docFile.addEventListener("change", lerDocumento);
 const btnOutro = document.getElementById("btnOutro");
 const outroNome = document.getElementById("outroNome");
 const outroFile = document.getElementById("outroFile");

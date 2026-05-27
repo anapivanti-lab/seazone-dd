@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from .checklist import itens_para
 from .config import PASTA_PROCESSOS
+from .extrator import extrair_cartao_cnpj, extrair_identidade
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .ocr import ler as ler_identidade
@@ -113,6 +114,22 @@ async def parecer(job_id: str):
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
     return JSONResponse(gerar_parecer(job))
+
+
+@app.post("/ler-documento")
+async def ler_documento(tipo: str = Form(...), arquivo: UploadFile = File(...)):
+    """Lê o documento anexado (PJ = Cartão CNPJ; PF = identidade), imagem ou PDF,
+    e devolve os campos que conseguiu extrair (você completa o que faltar)."""
+    conteudo = await arquivo.read()
+    nome = arquivo.filename or "documento"
+    suf = Path(nome).suffix.lower() or (".pdf" if conteudo[:4] == b"%PDF" else ".png")
+    tmp = PASTA_PROCESSOS / ("_doc_" + _slug(Path(nome).stem) + suf)
+    tmp.write_bytes(conteudo)
+    try:
+        dados = extrair_cartao_cnpj(str(tmp)) if tipo == "PJ" else extrair_identidade(str(tmp))
+    except Exception as e:
+        dados = {"ok": False, "erro": f"Falha ao ler o documento: {e}"}
+    return JSONResponse(dados)
 
 
 @app.post("/ler-identidade")
