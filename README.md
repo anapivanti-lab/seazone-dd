@@ -124,6 +124,12 @@ Depois, ao abrir esses sites, o navegador mostra um aviso para **selecionar o
 certificado** — escolha o da empresa. O arquivo `.pfx` e a senha **nunca** devem
 ir para o repositório (já estão no `.gitignore`).
 
+**Configuração de segredos:** copie `config_local.example.py` para
+`app/config_local.py` e preencha o caminho/senha do certificado e o **token do
+Portal da Transparência** (para a checagem de PEP — gere grátis em
+`api.portaldatransparencia.gov.br/api-de-dados/cadastrar-email`). Esse arquivo
+fica **fora do Git**. Tudo é opcional: sem ele, o sistema roda sem PEP/certificado.
+
 ## 7. Leitor de identidade (OCR) — opcional
 
 Para o sistema ler **RG, nome da mãe e data de nascimento** de uma imagem do

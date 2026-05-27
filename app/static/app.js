@@ -203,6 +203,7 @@ function renderParecer(d) {
     .join("");
   const corR = d.risco.startsWith("ALTO") ? "#c0392b" : d.risco.startsWith("MÉDIO") ? "#b8860b" : "#1a7d3c";
   parecerBox.innerHTML = `<h3>⚖️ Parecer de risco — <span style="color:${corR}">${d.risco}</span></h3>
+    <p><b>Conclusão:</b> ${d.conclusao || ""}</p>
     <table class="cl"><tbody>${linhas}</tbody></table>
     <p class="obs">Documento <b>parecer.html</b> salvo na pasta da franquia. Revise antes de concluir.</p>`;
 }

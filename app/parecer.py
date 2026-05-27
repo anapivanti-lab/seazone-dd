@@ -101,17 +101,35 @@ def gerar(job) -> dict:
                  if (civel or fraude) else ("ok", "Nenhum processo cível relevante nos PDFs lidos."))
 
     situacao_irregular = situacao and situacao != "ATIVA"
+    valores_proc = [pr.get("valor_maximo") or 0 for pr in job.processos]
+    maior_valor = max(valores_proc) if valores_proc else 0.0
+    alto_valor = maior_valor >= 50000
+
     if crim or fraude or positivas or situacao_irregular:
         risco = "ALTO"
-    elif any(c[0] == "alerta" for c in crits):
+    elif alto_valor or any(c[0] == "alerta" for c in crits):
         risco = "MÉDIO"
     else:
         risco = "BAIXO (sem alertas automáticos — revise e conclua)"
 
+    motivos = []
+    if crim:
+        motivos.append("processo(s) criminal(is)")
+    if fraude:
+        motivos.append("indício de fraude")
+    if positivas:
+        motivos.append("certidão(ões) positiva(s)")
+    if alto_valor:
+        motivos.append(f"valor relevante em processo (R$ {maior_valor:,.2f})")
+    if situacao_irregular:
+        motivos.append(f"situação cadastral {situacao}")
+    conclusao = ("Atenção: " + "; ".join(motivos) + ". Recomenda-se análise detalhada antes de contratar."
+                 if motivos else "Nenhum alerta automático encontrado. Revise as certidões e conclua.")
+
     resultado = {
         "tipo": ctx.tipo.value, "documento": ctx.documento, "nome": ctx.nome,
-        "uf": ctx.uf, "municipio": ctx.municipio, "risco": risco,
-        "situacao": situacao, "cnae": cnae, "cnae_desc": cnae_desc, "socios": socios,
+        "uf": ctx.uf, "municipio": ctx.municipio, "risco": risco, "conclusao": conclusao,
+        "maior_valor": maior_valor, "situacao": situacao, "cnae": cnae, "cnae_desc": cnae_desc, "socios": socios,
         "criterios": [{"texto": CRITERIOS[i], "status": crits[i][0], "obs": crits[i][1]} for i in range(6)],
         "certidoes": certidoes, "processos": job.processos,
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -145,6 +163,7 @@ Situação cadastral: <b>{d.get('situacao') or '—'}</b> · CNAE: {d.get('cnae'
 Sócios: {', '.join(d.get('socios') or []) or '—'}<br>
 Gerado em {d['gerado_em']}</p>
 <p>Classificação de risco: <span class="risco">{d['risco']}</span></p>
+<p><b>Conclusão:</b> {d.get('conclusao', '')}</p>
 <h2>Critérios</h2>
 <table><tr><th>Status</th><th>Critério</th><th>Observação</th></tr>{linhas}</table>
 <h2>Processos lidos</h2><ul>{procs}</ul>

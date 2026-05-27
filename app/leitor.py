@@ -39,6 +39,16 @@ def analisar(caminho: str) -> dict:
     nproc = re.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", plano)
     valores = re.findall(r"R\$\s?[\d\.]{1,15},\d{2}", plano)
 
+    def _num(v: str) -> float:
+        n = re.sub(r"[^\d,]", "", v).replace(",", ".")
+        try:
+            return float(n)
+        except Exception:
+            return 0.0
+
+    nums = [_num(v) for v in valores]
+    valor_maximo = max(nums) if nums else 0.0
+
     partes = {}
     for rot in _ROTULOS_PARTE:
         m = re.search(rot + r"[:\s]+([A-ZÀ-Ú][\wÀ-ú .&-]{3,60})", texto)
@@ -51,6 +61,8 @@ def analisar(caminho: str) -> dict:
         "numero": nproc.group(0) if nproc else "(não identificado)",
         "partes": partes,
         "valores": list(dict.fromkeys(valores))[:6],
+        "valor_maximo": valor_maximo,
+        "alto_valor": valor_maximo >= 50000,
         "riscos": riscos,
         "criminal": "Criminal" in riscos,
         "fraude": "Fraude" in riscos,
