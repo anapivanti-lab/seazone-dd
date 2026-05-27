@@ -94,7 +94,19 @@ async def _abrir_navegador(pw):
         contexto = await pw.chromium.launch_persistent_context(channel="chrome", **comum)
     except Exception:
         contexto = await pw.chromium.launch_persistent_context(**comum)
-    await contexto.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
+    await contexto.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR','pt','en-US','en']});
+        Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+        window.chrome = window.chrome || { runtime: {} };
+        const _q = navigator.permissions && navigator.permissions.query;
+        if (_q) navigator.permissions.query = (p) =>
+          (p && p.name === 'notifications')
+            ? Promise.resolve({ state: Notification.permission })
+            : _q(p);
+        """
+    )
     return contexto
 
 

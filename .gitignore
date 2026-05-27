@@ -6,6 +6,9 @@ __pycache__/
 # Dados sensíveis e perfil do navegador — NÃO versionar
 dados/
 
-# Configurações locais
+# Configurações locais e segredos — NUNCA versionar
 .env
+config_local.py
+*.pfx
+*.p12
 *.log

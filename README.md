@@ -111,7 +111,20 @@ Pronto — ela é detectada e usada automaticamente.
 
 ---
 
-## 6. Avisos
+## 6. Certificado digital (sites que pedem login)
+
+Alguns sites (CENPROT, certidões judiciais) exigem login por **certificado
+digital A1** (arquivo `.pfx`). Instale o certificado **uma vez** no Windows:
+
+- Dê **dois cliques no arquivo `.pfx`** e siga o assistente (escolha "Usuário
+  Atual"), **ou** rode no PowerShell:
+  `Import-PfxCertificate -FilePath "CAMINHO\cert.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password (Read-Host -AsSecureString)`
+
+Depois, ao abrir esses sites, o navegador mostra um aviso para **selecionar o
+certificado** — escolha o da empresa. O arquivo `.pfx` e a senha **nunca** devem
+ir para o repositório (já estão no `.gitignore`).
+
+## 7. Avisos
 
 - Os PDFs ficam **só na sua máquina** (`dados\saida`), não vão para a internet.
 - A pasta `dados\` está fora do controle de versão (Git) por conter dados
