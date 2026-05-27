@@ -1,25 +1,25 @@
-"""Gera o PARECER JURÍDICO da Due Diligence no formato do setor de Franquias
-(Seazone). Produz um documento WORD editável (.docx) e uma prévia em HTML.
+"""PARECER JURÍDICO único da Due Diligence (formato do setor de Franquias).
 
-Conclusão em 4 níveis:
-  1) Nada encontrado  -> texto padrão "não há impedimentos, podendo seguir".
-  2) Achado leve (ex.: CND positiva com débito < R$ 10.000) -> texto padrão +
-     "Porém, recomendamos: ...".
-  3) Risco financeiro real (débitos altos, execuções, protestos) -> bloco
-     "Financeiro: ... / Recomendação: 1, 2, 3 / podemos seguir".
-  4) Risco irreversível (processo criminal) -> "Processual: ... / Recomendação:
-     Não aprovar a concessão da franquia."
+Cada papel (Franquia / Representante legal / Operador) é processado num "run" e,
+ao gerar o parecer, salva um snapshot (_dd_<papel>.json) na pasta da DD. O parecer
+lê TODOS os snapshots da pasta e monta UM ÚNICO documento Word (.docx) editável com
+uma seção por papel + conclusão combinada (o risco mais grave entre todos).
+
+Conclusão em 4 níveis (sobre o conjunto): nada / achado leve / risco financeiro real
+/ risco irreversível (criminal).
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
 
 from .extrator import _texto_documento
 from .pep import checar as checar_pep
+from .storage import _slug
 
-LIMITE_DEBITO = 10000.0  # abaixo disso = achado leve; acima = risco real
+LIMITE_DEBITO = 10000.0
 
 TEXTO_OK = ("Após realizada a análise da documentação elencada acima, certificou-se que, "
             "estritamente em relação aos documentos apresentados pela franquia e os emitidos pelo "
@@ -29,6 +29,8 @@ TEXTO_OK = ("Após realizada a análise da documentação elencada acima, certif
 
 _MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
           "agosto", "setembro", "outubro", "novembro", "dezembro"]
+_ORDEM = {"Franquia": 0, "Representante legal": 1, "Representante legal e Operador": 1, "Operador": 2}
+_CORES = {"ALTO": "#c0392b", "MÉDIO": "#b8860b", "BAIXO": "#1a7d3c"}
 
 
 # ---------------------------------------------------------------- utilidades
@@ -56,16 +58,12 @@ def _data_extenso() -> str:
 
 
 def _classificar(caminho: str) -> str:
-    t = _texto_documento(caminho).lower()  # lê PDF e também imagem (via OCR)
+    t = _texto_documento(caminho).lower()
     if not t.strip():
         return "indeterminado"
-    # Comunicado da Receita Federal: quando a CND é POSITIVA não sai a certidão —
-    # sai o aviso "informações insuficientes para emitir a certidão". Isso = positiva
-    # (há pendência); a franquia precisa regularizar e esclarecer.
     if any(k in t for k in ("insuficientes para emitir", "não foi possível emitir",
-                            "nao foi possivel emitir", "não é possível emitir",
-                            "nao e possivel emitir", "insuficientes para emitir a certidão")):
-        return "positiva"
+                            "nao foi possivel emitir", "não é possível emitir", "nao e possivel emitir")):
+        return "positiva"  # comunicado da Receita = CND positiva
     if "positiva com efeito" in t or "positiva com efeitos" in t:
         return "negativa"
     if any(k in t for k in ("nada consta", "não constam", "nao constam", "negativ", "inexist")):
@@ -86,20 +84,12 @@ def _valor_protestos(caminho: str) -> float:
 
 
 def _qual_franquia(ctx, dados) -> str:
-    if ctx.tipo.value != "PJ":
-        return "Não constituído."
     sede = ctx.endereco or dados.get("endereco") or "endereço não informado"
     return (f"{ctx.nome or 'Razão social não informada'}, pessoa jurídica de direito privado, "
             f"inscrita no CNPJ sob o nº {_fmt(ctx.documento, True)}, com sede em {sede}.")
 
 
 def _qual_operador(ctx, dados) -> str:
-    if ctx.tipo.value != "PF":
-        socios = dados.get("socios") or []
-        if socios:
-            return ("Sócio(s)/representante(s): " + ", ".join(socios)
-                    + " — documentação individual a ser analisada em DD própria.")
-        return "A ser analisado com a documentação do representante legal."
     g = _genero(ctx.nome)
     bras = "brasileira" if g == "f" else "brasileiro"
     insc = "inscrita" if g == "f" else "inscrito"
@@ -114,19 +104,20 @@ def _qual_operador(ctx, dados) -> str:
             f"{_fmt(ctx.documento, False)}, residente e {domic} em {end}.")
 
 
-# ---------------------------------------------------------------- núcleo
-def gerar(job) -> dict:
+# ---------------------------------------------------------------- análise por entidade
+def _analisar_entidade(job) -> dict:
     ctx = job.ctx
     dados = getattr(job, "cnpj_dados", {}) or {}
     pj = ctx.tipo.value == "PJ"
-    sujeito = "a Franquia" if pj else ("a Operadora" if _genero(ctx.nome) == "f" else "o Operador")
-    de_quem = "da Franquia" if pj else ("da Operadora" if _genero(ctx.nome) == "f" else "do Operador")
+    papel = ctx.papel or ("Franquia" if pj else "Operador")
+    de_quem = "da Franquia" if pj else ("da " + papel if papel.lower().startswith("represent") and _genero(ctx.nome) == "f"
+                                        else "do " + papel)
 
     GRUPOS = ("Federais", "Estaduais", "Justiça Estadual", "Justiça Federal", "Municipais")
     certs = [{"nome": p.nome, "classe": _classificar(p.arquivo)}
              for p in job.passos if p.arquivo and p.grupo in GRUPOS and "Protesto" not in p.nome]
-    positivas = [c for c in certs if c["classe"] == "positiva"]
-    indet = [c for c in certs if c["classe"] == "indeterminado"]
+    positivas = [c["nome"] for c in certs if c["classe"] == "positiva"]
+    indet = [c["nome"] for c in certs if c["classe"] == "indeterminado"]
 
     passo_prot = next((p for p in job.passos if "Protesto" in p.nome), None)
     prot_classe = _classificar(passo_prot.arquivo) if (passo_prot and passo_prot.arquivo) else "sem"
@@ -134,28 +125,28 @@ def gerar(job) -> dict:
     total_prot = _valor_protestos(passo_prot.arquivo) if (prot_positiva and passo_prot.arquivo) else 0.0
 
     procs = job.processos or []
-    crim = [pr for pr in procs if pr.get("criminal")]
+    crim = any(pr.get("criminal") for pr in procs)
     total_proc = sum(pr.get("valor_maximo") or 0 for pr in procs)
 
-    socios = dados.get("socios", [])
     situacao = dados.get("situacao", "")
-    irregular = bool(situacao) and situacao != "ATIVA"
+    irregular = situacao if (situacao and situacao != "ATIVA") else ""
     pendencias = [p.nome for p in job.passos if p.grupo == "Você fornece" and not p.arquivo]
 
-    # ---- textos da análise ----
+    pep = checar_pep([], cpf=ctx.documento) if not pj else checar_pep(dados.get("socios", []))
+    pep_nomes = [f"{p['nome']} ({p['funcao']})" for p in (pep.get("pep") or [])]
+
     if not certs:
         t_cert = "Não há certidões coletadas até o momento."
     elif positivas:
-        t_cert = "Constam certidões POSITIVAS em nome " + de_quem + ": " + "; ".join(c["nome"] for c in positivas) + "."
+        t_cert = "Constam certidões POSITIVAS em nome " + de_quem + ": " + "; ".join(positivas) + "."
     elif indet:
         t_cert = ("As certidões foram coletadas. Confira manualmente as que não puderam ser lidas "
-                  "automaticamente: " + "; ".join(c["nome"] for c in indet) + ".")
+                  "automaticamente: " + "; ".join(indet) + ".")
     else:
         t_cert = "Todas as certidões estão regulares (negativas ou positivas com efeito de negativa)."
 
     if not procs:
-        t_proc = (f"Não foram localizados registros de ações judiciais ativas em que {sujeito} "
-                  "figure como parte no polo passivo.")
+        t_proc = f"Não foram localizados registros de ações judiciais ativas em nome {de_quem}."
     else:
         itens = []
         for pr in procs:
@@ -184,48 +175,79 @@ def gerar(job) -> dict:
 
     t_pend = ("Restam pendentes de envio: " + "; ".join(pendencias) + ".") if pendencias else ""
 
-    # ---- conclusão em 4 níveis ----
-    debito = total_proc + total_prot
+    qual = _qual_franquia(ctx, dados) if pj else _qual_operador(ctx, dados)
+    return {
+        "papel": papel, "ordem": _ORDEM.get(papel, 3), "tipo": ctx.tipo.value,
+        "qualificacao": qual,
+        "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
+        "docs": [p.nome for p in job.passos if p.arquivo] + [f"Processo: {pr.get('arquivo', '')}" for pr in procs],
+        "positivas": positivas, "prot_positiva": prot_positiva, "crim": crim, "procs": bool(procs),
+        "situacao_irregular": irregular, "pendencias": pendencias,
+        "total_proc": total_proc, "total_prot": total_prot, "pep": pep_nomes,
+    }
 
-    def recs(grave: bool):
-        out = []
-        if positivas:
-            out.append("Regularizar a situação fiscal junto à Receita Federal e esclarecer/reverter a(s) "
-                       "certidão(ões) positiva(s) (quando a CND federal é positiva, a Receita não emite a "
-                       "certidão e exibe aviso de informações insuficientes)" if grave
-                       else "a regularização e o esclarecimento da(s) certidão(ões) positiva(s)")
-        if procs:
-            v = f" (débito/valor não atualizado de {_reais(total_proc)})" if total_proc else ""
-            out.append(f"Regularização da situação financeira decorrente das ações judiciais{v}" if grave
-                       else f"a regularização das ações judiciais encontradas{v}")
-        if prot_positiva:
-            v = f" ({_reais(total_prot)})" if total_prot else ""
-            out.append(f"Pagamento dos protestos{v}" if grave else f"o pagamento/baixa dos protestos{v}")
-        if irregular:
-            out.append(f"Regularização da situação cadastral ({situacao}) do CNPJ")
-        if pendencias:
-            out.append("Envio dos documentos pendentes: " + "; ".join(pendencias))
-        return out
 
-    risco = "BAIXO"
-    categoria = ""        # "" (parágrafo) | "Financeiro" | "Processual"
-    concl_texto = TEXTO_OK
-    recomendacoes: list[str] = []
-    fecho = ""
+def _snapshot(pasta: Path, ent: dict) -> None:
+    try:
+        (pasta / f"_dd_{_slug(ent['papel'])}.json").write_text(
+            json.dumps(ent, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
-    achados = bool(positivas or prot_positiva or procs or irregular or pendencias)
-    grave = (debito >= LIMITE_DEBITO) or (len(positivas) >= 2) or (prot_positiva and bool(positivas)) \
-        or (total_proc >= LIMITE_DEBITO) or (total_prot >= LIMITE_DEBITO)
+
+def _carregar_entidades(pasta: Path) -> list:
+    ents = []
+    for f in pasta.glob("_dd_*.json"):
+        try:
+            ents.append(json.loads(f.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    ents.sort(key=lambda e: e.get("ordem", 3))
+    return ents
+
+
+# ---------------------------------------------------------------- conclusão combinada
+def _recs_entidade(e: dict) -> list:
+    lab = e["papel"]
+    out = []
+    if e["positivas"]:
+        out.append(f"Regularizar a situação fiscal e reverter/esclarecer a(s) certidão(ões) positiva(s) ({lab})")
+    if e["procs"]:
+        v = f" (débito/valor não atualizado de {_reais(e['total_proc'])})" if e.get("total_proc") else ""
+        out.append(f"Regularizar a situação decorrente das ações judiciais{v} ({lab})")
+    if e["prot_positiva"]:
+        v = f" ({_reais(e['total_prot'])})" if e.get("total_prot") else ""
+        out.append(f"Pagamento/baixa dos títulos protestados{v} ({lab})")
+    if e["situacao_irregular"]:
+        out.append(f"Regularização da situação cadastral ({e['situacao_irregular']}) do CNPJ ({lab})")
+    if e.get("pep"):
+        out.append(f"Verificar a exposição política identificada ({lab}): " + "; ".join(e["pep"]))
+    if e["pendencias"]:
+        out.append(f"Envio dos documentos pendentes ({lab}): " + "; ".join(e["pendencias"]))
+    return out
+
+
+def _conclusao(entidades: list) -> dict:
+    crim = any(e["crim"] for e in entidades)
+    positivas = any(e["positivas"] for e in entidades)
+    prot = any(e["prot_positiva"] for e in entidades)
+    procs = any(e["procs"] for e in entidades)
+    irregular = any(e["situacao_irregular"] for e in entidades)
+    achado = any(e["positivas"] or e["prot_positiva"] or e["procs"] or e["situacao_irregular"]
+                 or e["pendencias"] or e.get("pep") for e in entidades)
+    total = sum((e.get("total_proc") or 0) + (e.get("total_prot") or 0) for e in entidades)
+    n_pos = sum(1 for e in entidades if e["positivas"])
+    grave = total >= LIMITE_DEBITO or n_pos >= 2 or (prot and positivas) or (procs and total >= LIMITE_DEBITO)
+    recs = [r for e in entidades for r in _recs_entidade(e)]
 
     if crim:
-        risco, categoria = "ALTO", "Processual"
-        concl_texto = ("A identificação de processo(s) criminal(is) representa fator de atenção no contexto "
-                       "da análise de risco, apresentando riscos relevantes, principalmente reputacionais.")
-        recomendacoes = ["Não aprovar a concessão da franquia."]
-    elif grave:
-        risco, categoria = "ALTO", "Financeiro"
+        return {"risco": "ALTO", "categoria": "Processual",
+                "texto": ("A identificação de processo(s) criminal(is) representa fator de atenção no contexto "
+                          "da análise de risco, apresentando riscos relevantes, principalmente reputacionais."),
+                "recs": ["Não aprovar a concessão da franquia."], "fecho": ""}
+    if grave:
         tipos = []
-        if prot_positiva:
+        if prot:
             tipos.append("protestos")
         if positivas:
             tipos.append("certidões positivas")
@@ -234,45 +256,46 @@ def gerar(job) -> dict:
         if irregular:
             tipos.append("situação cadastral irregular")
         resumo = (", ".join(tipos[:-1]) + " e " + tipos[-1]) if len(tipos) > 1 else (tipos[0] if tipos else "os achados")
-        concl_texto = resumo[0].upper() + resumo[1:] + " indicam fragilidade de liquidez e histórico de inadimplência relevante."
-        recomendacoes = [r if r.endswith(".") else r + "." for r in recs(grave=True)]
-        fecho = "Com a conclusão das recomendações acima, podemos seguir com a contratação."
-    elif achados:
-        risco = "MÉDIO"
-        leves = recs(grave=False)
-        concl_texto = TEXTO_OK + " Porém, recomendamos: " + "; ".join(leves) + "."
-    # else: nível 1 -> TEXTO_OK puro (já é o default)
+        return {"risco": "ALTO", "categoria": "Financeiro",
+                "texto": resumo[0].upper() + resumo[1:] + " indicam fragilidade de liquidez e histórico de inadimplência relevante.",
+                "recs": [r if r.endswith(".") else r + "." for r in recs],
+                "fecho": "Com a conclusão das recomendações acima, podemos seguir com a contratação."}
+    if achado:
+        return {"risco": "MÉDIO", "categoria": "",
+                "texto": TEXTO_OK + " Porém, recomendamos: " + "; ".join(recs) + ".",
+                "recs": [], "fecho": ""}
+    return {"risco": "BAIXO", "categoria": "", "texto": TEXTO_OK, "recs": [], "fecho": ""}
 
-    docs = [p.nome for p in job.passos if p.arquivo] + [f"Processo: {pr.get('arquivo', '')}" for pr in procs]
 
+# ---------------------------------------------------------------- montar + salvar
+def gerar(job) -> dict:
+    ctx = job.ctx
+    pasta = ctx.pasta_saida
+    ent = _analisar_entidade(job)
+    _snapshot(pasta, ent)                 # salva o snapshot deste papel
+    entidades = _carregar_entidades(pasta) or [ent]
+    concl = _conclusao(entidades)
+
+    docs = []
+    for e in entidades:
+        for x in e.get("docs", []):
+            if x not in docs:
+                docs.append(x)
+
+    titulo = (ctx.operador or ctx.nome or ctx.documento)
     d = {
-        "tipo": ctx.tipo.value, "nome": ctx.nome, "documento": ctx.documento,
-        "risco": risco, "secao_principal": "Franquia" if pj else "Operador",
-        "rotulo_pf": (ctx.papel if (not pj and ctx.papel) else "Operador"),
-        "qual_franquia": _qual_franquia(ctx, dados), "qual_operador": _qual_operador(ctx, dados),
-        "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
-        "concl_categoria": categoria, "concl_texto": concl_texto, "recomendacoes": recomendacoes, "concl_fecho": fecho,
-        "docs_analisados": docs, "situacao": situacao,
-        "cnae": dados.get("cnae_codigo", ""), "cnae_desc": dados.get("cnae_descricao", ""),
+        "titulo": titulo, "id_suporte": ctx.id_suporte, "entidades": entidades, "docs": docs,
+        "risco": concl["risco"], "concl_categoria": concl["categoria"], "concl_texto": concl["texto"],
+        "recomendacoes": concl["recs"], "concl_fecho": concl["fecho"],
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"), "data_extenso": _data_extenso(),
     }
     d["html"] = _pagina_html(d)
-    d["arquivo"] = str(_salvar_docx(job, d))
+    d["arquivo"] = str(_salvar_docx(pasta, d))
     return d
 
 
-# ---------------------------------------------------------------- blocos comuns
-def _analise_pares(d):
-    """[(label, texto)] da seção principal (Certidões/Processos/Protestos/Pendências)."""
-    pares = [("Certidões:", d["certidoes_txt"]), ("Processos:", d["processos_txt"]),
-             ("Protestos:", d["protestos_txt"])]
-    if d["pendencias_txt"]:
-        pares.append(("Pendências:", d["pendencias_txt"]))
-    return pares
-
-
 # ---------------------------------------------------------------- WORD (.docx)
-def _salvar_docx(job, d) -> Path:
+def _salvar_docx(pasta: Path, d) -> Path:
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
@@ -282,61 +305,60 @@ def _salvar_docx(job, d) -> Path:
     doc.styles["Normal"].font.name = "Calibri"
     doc.styles["Normal"].font.size = Pt(11)
 
-    marca = doc.add_paragraph()
-    marca.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rm = marca.add_run("SEAZONE · DEPARTAMENTO JURÍDICO")
+    m = doc.add_paragraph()
+    m.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rm = m.add_run("SEAZONE · DEPARTAMENTO JURÍDICO")
     rm.bold = True
     rm.font.size = Pt(9)
     rm.font.color.rgb = AZUL
-
-    tit = doc.add_paragraph()
-    tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rt = tit.add_run(f"PARECER JURÍDICO — DUE DILIGENCE\n{d['nome'] or d['documento']}")
+    t = doc.add_paragraph()
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cab = f"PARECER JURÍDICO — DUE DILIGENCE"
+    if d["id_suporte"]:
+        cab += f" (#{d['id_suporte']})"
+    rt = t.add_run(f"{cab}\n{d['titulo']}")
     rt.bold = True
     rt.font.size = Pt(14)
 
     def secao(txt):
         p = doc.add_paragraph()
-        p.space_before = Pt(10)
         r = p.add_run(txt)
         r.bold = True
         r.font.size = Pt(12)
         r.font.color.rgb = AZUL
-        return p
 
     def label(lbl, texto, recuo=False):
         p = doc.add_paragraph()
         if recuo:
             p.paragraph_format.left_indent = Pt(14)
-        r = p.add_run(lbl + " ")
-        r.bold = True
-        p.add_run(texto)
-        return p
+        p.add_run(lbl + " ").bold = True
+        if texto:
+            p.add_run(texto)
 
-    label("Franquia:", d["qual_franquia"])
-    label(d["rotulo_pf"] + ":", d["qual_operador"])
+    secao("QUALIFICAÇÃO")
+    for e in d["entidades"]:
+        label(e["papel"] + ":", e["qualificacao"])
 
     secao("DOCUMENTOS ANALISADOS")
-    for x in (d["docs_analisados"] or ["(documentos conforme emitidos/anexados)"]):
+    for x in (d["docs"] or ["(documentos conforme emitidos/anexados)"]):
         doc.add_paragraph(x, style="List Bullet")
 
     secao("PARECER")
-    label("Franquia", "" if d["secao_principal"] == "Franquia" else
-          ("Todas as análises constam na seção do Operador." if d["tipo"] == "PF" else ""))
-    if d["secao_principal"] == "Franquia":
-        for lbl, txt in _analise_pares(d):
-            label(lbl, txt, recuo=True)
-    label(d["rotulo_pf"], "" if d["secao_principal"] == "Operador" else
-          "Documentação do(s) sócio(s)/representante(s) a ser analisada individualmente.")
-    if d["secao_principal"] == "Operador":
-        for lbl, txt in _analise_pares(d):
-            label(lbl, txt, recuo=True)
+    for e in d["entidades"]:
+        p = doc.add_paragraph()
+        rr = p.add_run(e["papel"])
+        rr.bold = True
+        rr.underline = True
+        label("Certidões:", e["certidoes_txt"], recuo=True)
+        label("Processos:", e["processos_txt"], recuo=True)
+        label("Protestos:", e["protestos_txt"], recuo=True)
+        if e["pendencias_txt"]:
+            label("Pendências:", e["pendencias_txt"], recuo=True)
 
     secao("CONCLUSÃO")
     if d["concl_categoria"]:
         label(d["concl_categoria"] + ":", d["concl_texto"])
-        rp = doc.add_paragraph()
-        rp.add_run("Recomendação:").bold = True
+        doc.add_paragraph().add_run("Recomendação:").bold = True
         for r in d["recomendacoes"]:
             doc.add_paragraph(r, style="List Number")
         if d["concl_fecho"]:
@@ -345,51 +367,48 @@ def _salvar_docx(job, d) -> Path:
         doc.add_paragraph(d["concl_texto"])
 
     doc.add_paragraph()
-    ass = doc.add_paragraph()
-    ass.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    ass.add_run(f"{d['data_extenso']}\n\n____________________________________\n").italic = False
-    ass.add_run("Departamento Jurídico — Seazone").bold = True
-
+    a = doc.add_paragraph()
+    a.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    a.add_run(f"{d['data_extenso']}\n\n____________________________________\n")
+    a.add_run("Departamento Jurídico — Seazone").bold = True
     rod = doc.add_paragraph()
     rr = rod.add_run(f"Documento gerado automaticamente pelo sistema de Due Diligence em {d['gerado_em']}. "
                      "Revise e ajuste antes de encaminhar ao setor de Franquias.")
     rr.font.size = Pt(8)
     rr.font.color.rgb = RGBColor(0x8A, 0x97, 0xA3)
 
-    from .storage import com_prefixo
-    destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, "Parecer_Juridico_DD") + ".docx")
+    destino = pasta / "Parecer_Juridico_DD.docx"
     doc.save(str(destino))
     return destino
 
 
 # ---------------------------------------------------------------- HTML (prévia)
-_CORES = {"ALTO": "#c0392b", "MÉDIO": "#b8860b", "BAIXO": "#1a7d3c"}
 _ESTILO = """
 body{font-family:Georgia,'Times New Roman',serif;color:#1a2332;max-width:820px;margin:1rem auto;line-height:1.65;padding:0 1.4rem;background:#fff}
 .cab{text-align:center;border-bottom:3px solid #0b4f6c;padding-bottom:.8rem;margin-bottom:1rem}
 .marca{color:#0b4f6c;font-weight:700;letter-spacing:2px;font-size:.78rem}
-h1{font-size:1.18rem;margin:.5rem 0 .8rem;font-weight:700}
-h2{font-size:1.0rem;color:#0b4f6c;border-bottom:1px solid #d3dde3;padding-bottom:.2rem;margin:1.4rem 0 .5rem}
+h1{font-size:1.15rem;margin:.5rem 0 .8rem;font-weight:700}
+h2{font-size:1.0rem;color:#0b4f6c;border-bottom:1px solid #d3dde3;padding-bottom:.2rem;margin:1.3rem 0 .5rem}
 p{text-align:justify;margin:.35rem 0}.q b{color:#0b4f6c}
 .ent{font-weight:700;margin-top:.7rem;text-decoration:underline}
 .sub{font-weight:700;margin:.45rem 0 .1rem;padding-left:.6rem}
 .badge{display:inline-block;padding:.2rem .9rem;border-radius:999px;color:#fff;font-weight:700;font-size:.8rem}
-.obs2{color:#5a6b7a;font-size:.84rem}ul,ol{margin:.3rem 0 .3rem 1.2rem}.rec li{margin:.25rem 0}
+ul,ol{margin:.3rem 0 .3rem 1.2rem}.rec li{margin:.25rem 0}
 .assinatura{margin-top:2rem;text-align:center}.rodape{margin-top:1.4rem;color:#8a97a3;font-size:.74rem;border-top:1px solid #eee;padding-top:.5rem}
 """
 
 
 def _corpo_html(d) -> str:
     cor = _CORES.get(d["risco"], "#1a7d3c")
-    docs = "".join(f"<li>{x}</li>" for x in d["docs_analisados"]) or "<li>(documentos conforme emitidos/anexados)</li>"
-    def bloco(principal):
-        if principal:
-            return "".join(f'<p class="sub">{l}</p><p>{t}</p>' for l, t in _analise_pares(d))
-        if d["tipo"] == "PF":
-            return "<p>Todas as análises constam na seção do Operador.</p>"
-        return "<p>Documentação do(s) sócio(s)/representante(s) a ser analisada individualmente.</p>"
-    franquia = bloco(d["secao_principal"] == "Franquia")
-    operador = bloco(d["secao_principal"] == "Operador")
+    docs = "".join(f"<li>{x}</li>" for x in d["docs"]) or "<li>(documentos conforme emitidos/anexados)</li>"
+    quals = "".join(f'<p class="q"><b>{e["papel"]}:</b> {e["qualificacao"]}</p>' for e in d["entidades"])
+    blocos = ""
+    for e in d["entidades"]:
+        pend = f'<p class="sub">Pendências:</p><p>{e["pendencias_txt"]}</p>' if e["pendencias_txt"] else ""
+        blocos += (f'<p class="ent">{e["papel"]}</p>'
+                   f'<p class="sub">Certidões:</p><p>{e["certidoes_txt"]}</p>'
+                   f'<p class="sub">Processos:</p><p>{e["processos_txt"]}</p>'
+                   f'<p class="sub">Protestos:</p><p>{e["protestos_txt"]}</p>{pend}')
     if d["concl_categoria"]:
         recs = "".join(f"<li>{r}</li>" for r in d["recomendacoes"])
         fecho = f"<p>{d['concl_fecho']}</p>" if d["concl_fecho"] else ""
@@ -397,28 +416,22 @@ def _corpo_html(d) -> str:
                  f'<p class="sub" style="padding-left:0">Recomendação:</p><ol class="rec">{recs}</ol>{fecho}')
     else:
         concl = f"<p>{d['concl_texto']}</p>"
-    cnae = f' · CNAE: {d["cnae"]} {d["cnae_desc"]}' if d["cnae"] else ""
-    sit = f' · Situação cadastral: {d["situacao"]}' if d["situacao"] else ""
+    idtxt = f" (#{d['id_suporte']})" if d["id_suporte"] else ""
     return f"""
     <div class="cab"><div class="marca">SEAZONE · DEPARTAMENTO JURÍDICO</div>
-      <h1>PARECER JURÍDICO — DUE DILIGENCE<br>{d['nome'] or d['documento']}</h1>
+      <h1>PARECER JURÍDICO — DUE DILIGENCE{idtxt}<br>{d['titulo']}</h1>
       <span class="badge" style="background:{cor}">Risco: {d['risco']}</span></div>
-    <h2>1. Qualificação</h2>
-    <p class="q"><b>Franquia:</b> {d['qual_franquia']}</p>
-    <p class="q"><b>{d['rotulo_pf']}:</b> {d['qual_operador']}</p>
+    <h2>1. Qualificação</h2>{quals}
     <h2>2. Documentos analisados</h2><ul>{docs}</ul>
-    <p class="obs2">Dados cadastrais: {d['tipo']}{sit}{cnae}.</p>
-    <h2>3. Parecer</h2>
-    <p class="ent">Franquia</p>{franquia}
-    <p class="ent">{d['rotulo_pf']}</p>{operador}
+    <h2>3. Parecer</h2>{blocos}
     <h2>4. Conclusão</h2>{concl}
     <p class="assinatura">{d['data_extenso']}<br><br>____________________________________<br><b>Departamento Jurídico — Seazone</b></p>
     <p class="rodape">Documento gerado automaticamente em {d['gerado_em']}. O arquivo editável está salvo como
-      <b>Parecer_Juridico_DD.docx</b> na pasta da franquia.</p>
+      <b>Parecer_Juridico_DD.docx</b> na pasta da DD.</p>
     """
 
 
 def _pagina_html(d) -> str:
     return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
-            f'<title>Parecer Jurídico — {d["nome"] or d["documento"]}</title>'
+            f'<title>Parecer Jurídico — {d["titulo"]}</title>'
             f"<style>{_ESTILO}</style></head><body>{_corpo_html(d)}</body></html>")
