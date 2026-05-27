@@ -4,8 +4,29 @@ from pathlib import Path
 # Raiz do projeto (pasta seazone-dd)
 RAIZ = Path(__file__).resolve().parent.parent
 
+# Pasta opcional do Google Drive (para Desktop). Se definida no config_local e
+# se o caminho EXISTIR, cada DD é salva lá e sincroniza sozinha; senão, local.
+try:
+    from .config_local import PASTA_SAIDA_DRIVE
+except Exception:
+    PASTA_SAIDA_DRIVE = None
+
+_PASTA_LOCAL = RAIZ / "dados" / "saida"
+
+
+def base_saida() -> Path:
+    """Resolve a pasta-base das DDs a cada uso (assim, se você ligar o Drive no
+    meio do caminho, novas DDs já vão para lá sem reiniciar)."""
+    if PASTA_SAIDA_DRIVE:
+        alvo = Path(PASTA_SAIDA_DRIVE)
+        if alvo.exists():  # só usa o Drive se a pasta realmente já estiver lá
+            return alvo
+    _PASTA_LOCAL.mkdir(parents=True, exist_ok=True)
+    return _PASTA_LOCAL
+
+
 # Onde os PDFs das certidões são salvos (uma subpasta por franquia)
-PASTA_SAIDA = RAIZ / "dados" / "saida"
+PASTA_SAIDA = base_saida()
 
 # Onde ficam os PDFs de processos que você baixa para o sistema ler
 PASTA_PROCESSOS = RAIZ / "dados" / "processos"
@@ -18,7 +39,7 @@ PASTA_PERFIL = RAIZ / "dados" / "perfil_navegador"
 # Precisa ser True para você conseguir resolver os captchas.
 NAVEGADOR_VISIVEL = True
 
-for _p in (PASTA_SAIDA, PASTA_PROCESSOS, PASTA_PERFIL):
+for _p in (PASTA_PROCESSOS, PASTA_PERFIL):
     _p.mkdir(parents=True, exist_ok=True)
 
 # --- Certificado digital (login automático nos sites que exigem) ---

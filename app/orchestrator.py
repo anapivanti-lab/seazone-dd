@@ -31,6 +31,7 @@ class Passo:
     status: str = "aguardando"  # aguardando|aberta|sucesso|enviado|manual|pendente|erro
     mensagem: str = ""
     arquivo: str | None = None
+    sob_demanda: bool = False   # tem botão "Abrir site" (abre só quando você clica)
 
 
 @dataclass
@@ -54,7 +55,8 @@ class Job:
             "pasta": str(self.ctx.pasta_saida),
             "passos": [
                 {"nome": p.nome, "grupo": p.grupo, "modo": p.modo,
-                 "status": p.status, "mensagem": p.mensagem, "arquivo": p.arquivo}
+                 "status": p.status, "mensagem": p.mensagem, "arquivo": p.arquivo,
+                 "sob_demanda": p.sob_demanda}
                 for p in self.passos
             ],
             "processos": self.processos,
@@ -76,14 +78,27 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
     ctx.pasta_saida = preparar_pasta(ctx)
     passos = []
     for it in itens_para(ctx):
+        sob_demanda = False
         if it.modo == "manual":
             status, msg = "manual", (it.obs or "Obtenha o documento e suba o PDF aqui.")
         elif it.modo == "local":
             status, msg = "local", (it.obs or "Preencha a UF/cidade no topo.")
+        elif it.modo == "abrir":
+            sob_demanda = True
+            status, msg = "aguardando", "Clique em 'Abrir site' para abrir no seu navegador."
+        elif it.modo == "auto":
+            prov = provedor_por_nome(it.provider)
+            if prov and getattr(prov, "auto_completo", False):
+                # 100% automático (headless): roda sozinho ao iniciar, sem abrir aba
+                status, msg = "aguardando", "Automático — emitido ao iniciar (sem captcha)."
+            else:
+                sob_demanda = True
+                status, msg = "aguardando", "Clique em 'Abrir site' para abrir e preencher."
         else:
             status, msg = "aguardando", ""
         passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url,
-                            provider=it.provider, status=status, mensagem=msg))
+                            provider=it.provider, status=status, mensagem=msg,
+                            sob_demanda=sob_demanda))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     job.cnpj_dados = dados or {}
     JOBS[job.id] = job
@@ -146,100 +161,117 @@ def _ligar_captura(page, prov, passo, ctx):
 
 
 async def executar_job(job: Job) -> None:
+    """Ao iniciar, roda APENAS os 100% automáticos (headless, sem abrir abas).
+    Os que precisam de você (captcha/login) ficam com botão 'Abrir site' e só
+    abrem quando você clica — um de cada vez, na mesma janela."""
     job.estado = "executando"
-    abrir_items = [p for p in job.passos if p.modo == "abrir"]
-    auto_items = [
-        p for p in job.passos
+    full = [
+        (p, provedor_por_nome(p.provider)) for p in job.passos
         if p.modo == "auto" and (not job.selecionados or p.nome in job.selecionados)
     ]
+    full = [(p, prov) for p, prov in full if prov and getattr(prov, "auto_completo", False)]
 
-    # 1) "Abrir no navegador normal": sem detecção de robô; copia o documento.
-    if abrir_items:
+    if full:
+        pwf = await async_playwright().start()
+        try:
+            nav = await pwf.chromium.launch(headless=True)
+            ctxf = await nav.new_context(accept_downloads=True)
+            for passo, prov in full:
+                page = await ctxf.new_page()
+                try:
+                    arq = await prov.executar(job.ctx, page)
+                    if arq:
+                        passo.status = "sucesso"
+                        passo.arquivo = str(arq)
+                        passo.mensagem = "Baixado automaticamente (sem captcha)."
+                    else:
+                        passo.status = "erro"
+                        passo.mensagem = "Não consegui capturar o PDF."
+                except Exception as e:
+                    passo.status = "erro"
+                    passo.mensagem = f"Falha na emissão automática ({type(e).__name__})."
+                finally:
+                    await page.close()
+            await ctxf.close()
+            await nav.close()
+        finally:
+            await pwf.stop()
+
+    job.estado = "aguardando_voce"
+
+
+async def _garantir_navegador(job: Job):
+    """Abre o navegador controlado UMA vez e reusa para todas as certidões
+    (assim elas viram abas na MESMA janela, não janelas novas)."""
+    if job._contexto is None:
+        job._pw = await async_playwright().start()
+        job._contexto = await _abrir_navegador(job._pw)
+    return job._contexto
+
+
+async def abrir_item(job: Job, nome: str) -> Passo | None:
+    """Abre/emite UM item específico (chamado pelo botão 'Abrir site')."""
+    passo = next((p for p in job.passos if p.nome == nome), None)
+    if passo is None:
+        return None
+
+    # 'abrir': sites com bloqueio anti-robô -> vão para o SEU navegador normal.
+    if passo.modo == "abrir":
         _copiar_clipboard(job.ctx.documento)
-        ja_aberto = set()
-        for passo in abrir_items:
-            try:
-                if passo.url and passo.url not in ja_aberto:
-                    os.startfile(passo.url)  # abre no navegador padrão (Windows)
-                    ja_aberto.add(passo.url)
-                    passo.mensagem = ("Abri no seu navegador. Cole o CNPJ/CPF com Ctrl+V, valide o captcha, "
-                                      "baixe o PDF e clique em 'Enviar PDF' aqui.")
-                else:
-                    passo.mensagem = ("Mesma página já aberta — uma certidão pode cobrir mais de um item. "
-                                      "Baixe e suba o PDF aqui.")
-                passo.status = "aberta"
-            except Exception as e:
-                passo.status = "erro"
-                passo.mensagem = f"Não consegui abrir a página: {e}"
+        try:
+            if passo.url:
+                os.startfile(passo.url)
+            passo.status = "aberta"
+            passo.mensagem = ("Abri no seu navegador. Cole o CNPJ/CPF com Ctrl+V, valide o captcha, "
+                              "baixe o PDF e clique em 'Enviar PDF' aqui.")
+        except Exception as e:
+            passo.status = "erro"
+            passo.mensagem = f"Não consegui abrir a página: {e}"
+        return passo
 
-    # 2) "Automático": separa os 100% automáticos (headless, sem você precisar
-    #    fazer nada) dos que precisam que você resolva o captcha (navegador visível).
-    if auto_items:
-        full, headed = [], []
-        for passo in auto_items:
-            prov = provedor_por_nome(passo.provider)
-            if prov is None:
-                passo.status = "erro"
-                passo.mensagem = "Provedor automático não encontrado."
-            elif getattr(prov, "auto_completo", False):
-                full.append((passo, prov))
-            else:
-                headed.append((passo, prov))
-
-        # 2a) 100% automáticos (headless): preenche, emite e salva o PDF sozinho
-        if full:
+    if passo.modo == "auto":
+        prov = provedor_por_nome(passo.provider)
+        if prov is None:
+            passo.status = "erro"
+            passo.mensagem = "Provedor automático não encontrado."
+            return passo
+        # 100% automático: roda headless na hora (sem abrir aba)
+        if getattr(prov, "auto_completo", False):
             pwf = await async_playwright().start()
             try:
                 nav = await pwf.chromium.launch(headless=True)
                 ctxf = await nav.new_context(accept_downloads=True)
-                for passo, prov in full:
-                    page = await ctxf.new_page()
-                    try:
-                        arq = await prov.executar(job.ctx, page)
-                        if arq:
-                            passo.status = "sucesso"
-                            passo.arquivo = str(arq)
-                            passo.mensagem = "Baixado automaticamente (sem captcha)."
-                        else:
-                            passo.status = "erro"
-                            passo.mensagem = "Não consegui capturar o PDF."
-                    except Exception as e:
+                page = await ctxf.new_page()
+                try:
+                    arq = await prov.executar(job.ctx, page)
+                    if arq:
+                        passo.status = "sucesso"
+                        passo.arquivo = str(arq)
+                        passo.mensagem = "Baixado automaticamente (sem captcha)."
+                    else:
                         passo.status = "erro"
-                        passo.mensagem = f"Falha na emissão automática ({type(e).__name__})."
-                    finally:
-                        await page.close()
-                await ctxf.close()
-                await nav.close()
+                        passo.mensagem = "Não consegui capturar o PDF."
+                finally:
+                    await page.close()
+                    await ctxf.close()
+                    await nav.close()
             finally:
                 await pwf.stop()
+            return passo
+        # precisa de captcha: abre uma ABA na mesma janela controlada e preenche
+        try:
+            contexto = await _garantir_navegador(job)
+            page = await contexto.new_page()
+            _ligar_captura(page, prov, passo, job.ctx)
+            await prov.abrir(job.ctx, page)
+            passo.status = "aberta"
+            passo.mensagem = "Aba aberta — resolva o captcha e emita; o PDF é salvo sozinho."
+        except Exception as e:
+            passo.status = "erro"
+            passo.mensagem = f"Não consegui abrir o site ({type(e).__name__})."
+        return passo
 
-        # 2b) Precisam de captcha: navegador visível; você conclui
-        if headed:
-            pw = await async_playwright().start()
-            job._pw = pw
-            try:
-                contexto = await _abrir_navegador(pw)
-                job._contexto = contexto
-                for passo, prov in headed:
-                    try:
-                        page = await contexto.new_page()
-                        _ligar_captura(page, prov, passo, job.ctx)
-                        await prov.abrir(job.ctx, page)
-                        passo.status = "aberta"
-                        passo.mensagem = "Aba aberta — resolva o captcha e emita; o PDF é salvo sozinho."
-                    except Exception as e:
-                        passo.status = "erro"
-                        passo.mensagem = f"Não consegui abrir o site ({type(e).__name__})."
-            except Exception as e:
-                for passo, prov in headed:
-                    passo.status = "erro"
-                    passo.mensagem = f"Não consegui abrir o navegador: {e}"
-                try:
-                    await pw.stop()
-                except Exception:
-                    pass
-
-    job.estado = "aguardando_voce"
+    return passo
 
 
 async def concluir_job(job: Job) -> None:

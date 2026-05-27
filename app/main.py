@@ -16,7 +16,7 @@ from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .ocr import ler as ler_identidade
 from .parecer import gerar as gerar_parecer
-from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
+from .orchestrator import JOBS, Passo, abrir_item, concluir_job, criar_job, executar_job
 from .providers import provedores_para
 from .storage import _slug
 
@@ -144,6 +144,16 @@ async def abrir_pasta(job_id: str):
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=500)
     return JSONResponse({"ok": True})
+
+
+@app.post("/abrir-item/{job_id}")
+async def abrir_item_ep(job_id: str, nome: str = Form(...)):
+    """Abre/emite UM item (botão 'Abrir site') — um de cada vez, sem floodar abas."""
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    await abrir_item(job, nome)
+    return JSONResponse(job.to_dict())
 
 
 @app.post("/abrir-arquivo/{job_id}")

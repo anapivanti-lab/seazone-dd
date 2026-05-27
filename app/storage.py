@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from .config import PASTA_SAIDA
+from .config import base_saida
 from .models import Contexto
 
 
@@ -19,7 +19,7 @@ def _slug(texto: str) -> str:
 
 def preparar_pasta(ctx: Contexto) -> Path:
     rotulo = _slug(ctx.nome) if ctx.nome else ctx.documento
-    pasta = PASTA_SAIDA / f"{rotulo}_{ctx.documento}"
+    pasta = base_saida() / f"{rotulo}_{ctx.documento}"
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta
 

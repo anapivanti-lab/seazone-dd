@@ -46,7 +46,7 @@ const META = {
   manual: ["📤", "Envio manual"],
   aberta: ["📂", "Aberta — conclua no site"],
   pendente: ["⏳", "Pendente"],
-  aguardando: ["🌐", "Abre automático"],
+  aguardando: ["•", "Aguardando"],
   executando: ["🔄", "Abrindo…"],
   local: ["📍", "Preencha a UF/cidade"],
   erro: ["❌", "Erro"],
@@ -76,9 +76,17 @@ function render(itens, comJob) {
       } else {
         [ic, tx] = MODO[p.modo] || MODO.manual;
       }
-      const acao = comJob
-        ? `${p.arquivo ? `<button type="button" class="upbtn abrir" data-abrir="${p.nome}">📄 Abrir PDF</button> ` : ""}<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>`
-        : "";
+      let acao = "";
+      if (comJob) {
+        if (p.sob_demanda && p.status !== "sucesso" && p.status !== "enviado") {
+          const txt = p.status === "aberta" ? "↻ Reabrir site" : "🌐 Abrir site";
+          acao += `<button type="button" class="upbtn site" data-abrir-item="${p.nome}">${txt}</button> `;
+        }
+        if (p.arquivo) {
+          acao += `<button type="button" class="upbtn abrir" data-abrir="${p.nome}">📄 Abrir PDF</button> `;
+        }
+        acao += `<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>`;
+      }
       const obs = comJob
         ? (p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : "")
         : (p.obs ? `<br><span class="obs">${p.obs}</span>` : "");
@@ -129,13 +137,26 @@ checklistDiv.addEventListener("change", (e) => {
   if (inp.matches('input[type="file"]') && inp.files[0]) enviar(inp.dataset.item, inp.files[0]);
 });
 
-// Abrir o PDF já capturado de um item
 checklistDiv.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-abrir]");
-  if (b && jobAtual) {
+  // Abrir o PDF já capturado
+  const pdf = e.target.closest("[data-abrir]");
+  if (pdf && jobAtual) {
     const fd = new FormData();
-    fd.append("nome", b.dataset.abrir);
+    fd.append("nome", pdf.dataset.abrir);
     fetch("/abrir-arquivo/" + jobAtual, { method: "POST", body: fd });
+    return;
+  }
+  // Abrir o SITE de uma certidão (um de cada vez)
+  const site = e.target.closest("[data-abrir-item]");
+  if (site && jobAtual) {
+    site.disabled = true;
+    site.textContent = "abrindo…";
+    const fd = new FormData();
+    fd.append("nome", site.dataset.abrirItem);
+    fetch("/abrir-item/" + jobAtual, { method: "POST", body: fd }).then(() => {
+      ultimoRender = "";
+      atualizar();
+    });
   }
 });
 
