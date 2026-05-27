@@ -284,24 +284,14 @@ btnParecer.addEventListener("click", async () => {
   const r = await fetch("/parecer/" + jobAtual, { method: "POST" });
   renderParecer(await r.json());
   btnParecer.disabled = false;
-  btnParecer.textContent = "⚖️ Gerar parecer de risco";
+  btnParecer.textContent = "⚖️ Gerar parecer jurídico";
 });
 
 function renderParecer(d) {
-  const COR = { ok: "#1a7d3c", alerta: "#c0392b", revisar: "#b8860b" };
-  const IC = { ok: "✅", alerta: "⚠️", revisar: "🔎" };
-  const linhas = d.criterios
-    .map(
-      (c) =>
-        `<tr><td style="color:${COR[c.status]};white-space:nowrap">${IC[c.status]} ${c.status}</td>
-         <td>${c.texto}<br><span class="obs">${c.obs}</span></td></tr>`
-    )
-    .join("");
-  const corR = d.risco.startsWith("ALTO") ? "#c0392b" : d.risco.startsWith("MÉDIO") ? "#b8860b" : "#1a7d3c";
-  parecerBox.innerHTML = `<h3>⚖️ Parecer de risco — <span style="color:${corR}">${d.risco}</span></h3>
-    <p><b>Conclusão:</b> ${d.conclusao || ""}</p>
-    <table class="cl"><tbody>${linhas}</tbody></table>
-    <p class="obs">Documento <b>parecer.html</b> salvo na pasta da franquia. Revise antes de concluir.</p>`;
+  parecerBox.innerHTML = `<iframe id="pframe" style="width:100%;height:640px;border:1px solid #d3dde3;border-radius:8px;background:#fff"></iframe>
+    <p class="obs">📄 Salvo como <b>Parecer_Juridico_DD.html</b> na pasta da franquia (abre no navegador ou Word). Revise e ajuste antes de enviar ao setor de Franquias.</p>`;
+  const f = document.getElementById("pframe");
+  if (f) f.srcdoc = d.html || "";
 }
 
 function renderCnpj(d) {
