@@ -36,17 +36,27 @@
           <input name="municipio" placeholder="Florianópolis">
         </label>
       </div>
+
+      <fieldset id="certidoes-box">
+        <legend>Certidões a emitir</legend>
+        <div id="certidoes" class="certidoes">carregando…</div>
+      </fieldset>
+
       <button type="submit">Iniciar emissão</button>
     </form>
 
     <section id="painel" hidden>
       <h2>Andamento <span id="estado" class="tag"></span></h2>
-      <p class="dica">⏳ Quando aparecer um <b>captcha</b> na janela do navegador que abriu,
-        resolva e clique em consultar/emitir. O sistema captura o PDF sozinho e passa para a próxima.</p>
+      <p class="dica">⏳ Nas abas que abriram, <b>resolva o captcha</b> e clique em consultar/emitir.
+        Cada PDF baixado é salvo sozinho. Quando terminar tudo, clique em <b>Concluir</b>.</p>
       <table id="tabela">
         <thead><tr><th>Status</th><th>Certidão</th><th>Observação</th><th>PDF</th></tr></thead>
         <tbody></tbody>
       </table>
+      <div class="acoes">
+        <button type="button" id="concluir" hidden>Concluir e gerar relatório</button>
+        <button type="button" id="abrirPasta" class="secundario">Abrir pasta dos PDFs</button>
+      </div>
       <p id="pasta" class="pasta"></p>
     </section>
   </main>

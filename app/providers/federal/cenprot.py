@@ -1,17 +1,13 @@
-"""Certidão de Protestos — CENPROT (consulta nacional de protestos). PJ e PF."""
+"""Certidão de Protestos — CENPROT (consulta nacional de protestos). PJ e PF.
+Obs.: a consulta nacional pode exigir cadastro/login gratuito no portal — o
+perfil do navegador é persistente, então você só faz o login uma vez."""
 from ..base import BaseProvider, registrar
-
-URL = "https://site.cenprot.org.br/consulta-protesto"
 
 
 @registrar
 class Protestos(BaseProvider):
     nome = "Certidão de Protestos (CENPROT)"
+    nome_arquivo = "Protestos_CENPROT"
     nivel = "nacional"
-
-    async def emitir(self, ctx, page):
-        async def preencher(page, ctx):
-            campo = page.locator("input[name*='documento'], input[type='text']").first
-            await campo.fill(ctx.documento)
-
-        return await self._fluxo_assistido(page, ctx, URL, "Protestos_CENPROT", preencher)
+    URL = "https://www.pesquisaprotesto.com.br/"
+    SELETOR = "input[name*='documento'], input[type='text']"

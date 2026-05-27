@@ -10,13 +10,13 @@ PASTA_SAIDA = RAIZ / "dados" / "saida"
 # Onde ficam os PDFs de processos que você baixa para o sistema ler
 PASTA_PROCESSOS = RAIZ / "dados" / "processos"
 
+# Perfil persistente do navegador: mantém logins/cookies entre execuções
+# (útil para sites que exigem cadastro, como o CENPROT, e para o certificado).
+PASTA_PERFIL = RAIZ / "dados" / "perfil_navegador"
+
 # Mostrar o navegador durante a automação?
 # Precisa ser True para você conseguir resolver os captchas.
 NAVEGADOR_VISIVEL = True
 
-# Tempo máximo (segundos) que o sistema espera você resolver um captcha
-# e a certidão ser gerada antes de seguir para a próxima.
-TIMEOUT_CAPTCHA = 180
-
-PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
-PASTA_PROCESSOS.mkdir(parents=True, exist_ok=True)
+for _p in (PASTA_SAIDA, PASTA_PROCESSOS, PASTA_PERFIL):
+    _p.mkdir(parents=True, exist_ok=True)

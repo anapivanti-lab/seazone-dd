@@ -33,17 +33,18 @@ demorar alguns minutos na primeira vez. Ao terminar, aparece "Instalação concl
 
 ## 3. Como usar (no dia a dia)
 
-1. Dê dois cliques em **`iniciar.bat`**. A tela abre sozinha no navegador
-   (`http://127.0.0.1:8000`).
+1. Dê dois cliques em **`iniciar.bat`** (ou no atalho da Área de Trabalho).
+   A tela abre sozinha no navegador (`http://127.0.0.1:8000`).
 2. Escolha **Franquia (CNPJ)** ou **Operador/Representante (CPF)**, preencha o
-   documento, o nome, a UF e o município. Clique em **Iniciar emissão**.
-3. Uma **janela do navegador automático** vai abrir e passar por cada site.
-   Quando aparecer um **captcha** ("não sou robô"), resolva e clique em
-   consultar/emitir — o sistema captura o PDF e segue para a próxima.
-4. No fim, todos os PDFs e um **`relatorio.html`** ficam na pasta da franquia,
-   dentro de `dados\saida\`.
+   documento, o nome, a UF e o município. Marque as **certidões** desejadas e
+   clique em **Iniciar emissão**.
+3. Uma **janela de navegador** abre com uma aba por certidão, já com o documento
+   preenchido. Em cada aba, **resolva o captcha** e clique em consultar/emitir.
+   Cada PDF que baixar é **salvo automaticamente** na pasta da franquia.
+4. Quando terminar, volte à tela e clique em **Concluir e gerar relatório**.
+   Use **Abrir pasta dos PDFs** para ver os arquivos e o `relatorio.html`.
 
-Para encerrar, feche a janela preta do `iniciar.bat`.
+Para encerrar o sistema, feche a janela preta do `iniciar.bat`.
 
 ---
 
@@ -51,7 +52,7 @@ Para encerrar, feche a janela preta do `iniciar.bat`.
 
 | Etapa | Conteúdo | Status |
 |-------|----------|--------|
-| 1 | Certidões **federais** (CND Receita/PGFN, Trabalhista, FGTS), **Protestos (CENPROT)**, Cartão CNPJ | 🟡 estrutura pronta, calibrando sites |
+| 1 | **Federais/nacionais**: CND Federal (Receita/PGFN), CND Trabalhista (TST), Protestos (CENPROT Nacional), Cartão CNPJ | 🟢 endereços confirmados; ajustando captcha/preenchimento |
 | 2 | **SC**: Fazenda estadual, TJSC e prefeituras de SC | ⬜ a fazer |
 | 3 | **BA (Salvador)** e **SP (capital)** | ⬜ a fazer |
 | 4 | Demais estados + **leitor de processos** + **parecer de risco** | ⬜ a fazer |
