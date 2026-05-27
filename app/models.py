@@ -31,9 +31,12 @@ class Contexto:
 
     tipo: TipoPessoa
     documento: str               # CNPJ ou CPF (apenas dígitos)
-    nome: str = ""               # razão social / nome (para a pasta e o relatório)
+    nome: str = ""               # razão social / nome completo
     uf: str = ""                 # ex.: "SC"
     municipio: str = ""          # ex.: "Florianópolis"
+    rg: str = ""                 # RG (certidões judiciais de pessoa física)
+    nome_mae: str = ""           # nome da mãe (idem)
+    endereco: str = ""           # endereço (idem)
     pasta_saida: Optional[Path] = None
 
     def __post_init__(self):

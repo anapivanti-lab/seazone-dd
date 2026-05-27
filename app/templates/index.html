@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=10">
+  <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
   <header>
@@ -32,6 +32,15 @@
         <label class="uf">UF<input name="uf" placeholder="SC" maxlength="2"></label>
         <label class="cresce">Município<input name="municipio" placeholder="Florianópolis"></label>
       </div>
+      <details class="extra">
+        <summary>Dados adicionais (para certidões judiciais — pessoa física)</summary>
+        <div class="linha">
+          <label class="cresce">RG<input name="rg" placeholder="RG"></label>
+          <label class="cresce">Nome da mãe<input name="nome_mae" placeholder="Nome completo da mãe"></label>
+        </div>
+        <label>Endereço<input name="endereco" placeholder="Rua, nº, bairro, cidade" style="width:100%"></label>
+      </details>
+
       <button type="submit">Iniciar</button>
     </form>
 
@@ -74,6 +83,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=10"></script>
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

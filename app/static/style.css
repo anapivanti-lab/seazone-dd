@@ -74,3 +74,6 @@ table.cl .ac { white-space: nowrap; width: 1%; text-align: right; }
 .proc.alerta { border-left: 4px solid #c0392b; background: #fdf3f2; }
 .cnpj { background: #eef6ff; border: 1px solid #cfe0f0; border-radius: 6px; padding: .6rem .8rem; margin: .5rem 0 1rem; font-size: .85rem; }
 .cnpj.alerta { border-left: 4px solid #c0392b; background: #fdf3f2; }
+.extra { margin: .4rem 0 1rem; font-size: .85rem; }
+.extra summary { cursor: pointer; color: var(--azul); font-weight: 600; padding: .3rem 0; }
+.extra label { margin-top: .4rem; }
