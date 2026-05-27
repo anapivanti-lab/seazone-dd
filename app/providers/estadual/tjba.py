@@ -32,6 +32,16 @@ async def _tentar(*acoes) -> bool:
     return False
 
 
+def _fmt_doc(doc: str, pj: bool) -> str:
+    """Formata CPF/CNPJ (alguns campos do TJBA têm máscara e recusam só dígitos)."""
+    d = re.sub(r"\D", "", doc or "")
+    if pj and len(d) == 14:
+        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+    if not pj and len(d) == 11:
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    return d
+
+
 def _raiz(s: str) -> str:
     """Raiz do estado civil para casar com a opção do site (ex.: 'Solteiro(a)'->'SOLTE')."""
     s = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
@@ -130,13 +140,13 @@ class _TJBABase(BaseProvider):
         # 2ª tela — preenche conforme PJ ou PF (você valida o captcha e emite)
         if ctx.tipo == TipoPessoa.PJ:
             await _tentar(lambda: page.fill("#razaoSocial", ctx.nome, timeout=4000))
-            await _tentar(lambda: page.fill("#cnpj", ctx.documento, timeout=4000))
+            await _tentar(lambda: page.fill("#cnpj", _fmt_doc(ctx.documento, True), timeout=4000))
             await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=4000))
         else:
             await _tentar(lambda: page.fill("#nome", ctx.nome, timeout=4000))
             await _tentar(lambda: page.fill("#nacionalidade", ctx.nacionalidade or "Brasileira", timeout=3000))
             await _escolher_estado_civil(page, ctx.estado_civil)
-            await _tentar(lambda: page.fill("#cpf", ctx.documento, timeout=4000))
+            await _tentar(lambda: page.fill("#cpf", _fmt_doc(ctx.documento, False), timeout=4000))
             await _tentar(lambda: page.fill("#rg", ctx.rg, timeout=3000))
             await _tentar(lambda: page.fill("#orgao", ctx.orgao_expedidor, timeout=3000))
             await _tentar(lambda: page.fill("#endereco", ctx.endereco, timeout=3000))

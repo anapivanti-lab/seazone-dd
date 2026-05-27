@@ -33,7 +33,7 @@ async function lerDocumento() {
     lerStatus.textContent = "Anexe o arquivo (imagem ou PDF) primeiro.";
     return;
   }
-  lerStatus.textContent = "Lendo o documento… (pode levar alguns segundos)";
+  lerStatus.textContent = "Lendo o documento e conferindo o CPF (várias leituras)… pode levar uns 15 segundos.";
   const fd = new FormData();
   fd.append("tipo", tipoSel.value);
   fd.append("arquivo", docFile.files[0]);
@@ -56,9 +56,11 @@ async function lerDocumento() {
   set("data_nascimento", d.data_nascimento);
   set("orgao_expedidor", d.orgao_expedidor);
   set("nome_pai", d.nome_pai);
-  lerStatus.textContent = d.ok
+  let msg = d.ok
     ? "✅ Li o documento. Confira os campos e complete o que faltar (e o endereço)."
     : "⚠️ " + (d.erro || "Não consegui ler tudo.") + " Preencha os campos à mão.";
+  if (d.tipo === "PF" && !d.documento) msg += " ⚠️ Não li o CPF com segurança — digite o CPF à mão.";
+  lerStatus.textContent = msg;
   carregarChecklist();
   buscarMunicipal();
 }

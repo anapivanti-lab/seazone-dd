@@ -131,6 +131,71 @@ def _cmp(s: str) -> str:
     return re.sub(r"\s+", " ", s.upper()).strip()
 
 
+def cpf_valido(cpf: str) -> bool:
+    """Confere os dígitos verificadores do CPF (pega erro de leitura do OCR)."""
+    c = re.sub(r"\D", "", cpf or "")
+    if len(c) != 11 or len(set(c)) == 1:
+        return False
+    for i in (9, 10):
+        soma = sum(int(c[n]) * ((i + 1) - n) for n in range(i))
+        if (soma * 10 % 11 % 10) != int(c[i]):
+            return False
+    return True
+
+
+def _imagens_extra(caminho: str):
+    """Imagens para o 'triple check' do CPF: imagem(ns) embutida(s) em alta resolução
+    + render em 400 dpi (PDF), ou a própria imagem + ampliada (arquivo de imagem)."""
+    ext = Path(caminho).suffix.lower()
+    imgs = []
+    try:
+        from PIL import Image
+        if ext == ".pdf":
+            import fitz
+            doc = fitz.open(caminho)
+            embut = []
+            for img in doc.get_page_images(0):
+                try:
+                    base = doc.extract_image(img[0])
+                    im = Image.open(io.BytesIO(base["image"]))
+                    if im.width >= 300 and im.height >= 200:
+                        embut.append(im)
+                except Exception:
+                    pass
+            embut.sort(key=lambda im: im.width * im.height, reverse=True)
+            for im in embut[:1]:  # a maior (frente da CNH/RG)
+                imgs.append(im)
+                imgs.append(im.resize((im.width * 2, im.height * 2)))
+            imgs.append(Image.open(io.BytesIO(doc[0].get_pixmap(dpi=400).tobytes("png"))))
+            doc.close()
+        elif ext in IMG_EXT:
+            im = Image.open(caminho)
+            imgs.append(im)
+            imgs.append(im.resize((im.width * 2, im.height * 2)))
+    except Exception:
+        pass
+    return imgs
+
+
+def _coletar_cpfs(texto: str, cont: dict) -> None:
+    for c in re.findall(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}", texto) + re.findall(r"(?<!\d)\d{11}(?!\d)", texto):
+        d = re.sub(r"\D", "", c)
+        if len(d) == 11:
+            cont[d] = cont.get(d, 0) + 1
+
+
+def melhor_cpf(caminho: str, texto_base: str = "") -> str:
+    """'Triple check' do CPF: junta os candidatos do texto + várias passadas de OCR e
+    escolhe o que PASSA na validação e aparece mais vezes (votação). '' se nenhum valida."""
+    cont: dict = {}
+    _coletar_cpfs(texto_base, cont)
+    for im in _imagens_extra(caminho):
+        for lang, psm in (("por", 6), ("eng", 6)):
+            _coletar_cpfs(_ocr_imagem(im, lang, psm), cont)
+    validos = {d: n for d, n in cont.items() if cpf_valido(d)}
+    return max(validos, key=validos.get) if validos else ""
+
+
 def _eh_nome(s: str) -> bool:
     return bool(re.search(r"[A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú]{2,}", s))
 
@@ -161,9 +226,9 @@ def extrair_identidade(caminho: str) -> dict:
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     plano = " ".join(texto.split())
 
-    # CPF: só no formato com pontos/traço (evita pegar o nº de registro da CNH)
-    cpfs = re.findall(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", plano)
-    cpf = re.sub(r"\D", "", cpfs[0]) if cpfs else ""
+    # CPF: "triple check" — junta candidatos do texto + várias passadas de OCR e
+    # escolhe o que passa na validação e mais se repete (corrige erro de leitura).
+    cpf = melhor_cpf(caminho, texto)
 
     rg = ""
     m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|DOC[.\s/]*IDENTIDADE|IDENTIDADE)[^\d]{0,30}(\d[\d.\-]{5,12}\w?)",
@@ -216,9 +281,9 @@ def extrair_identidade(caminho: str) -> dict:
         nome = _achar_nome_titular(linhas, nome_mae, nome_pai)
 
     ok = bool(cpf or rg or nome or nome_mae or data_nascimento)
-    out = {"ok": ok, "tipo": "PF", "documento": cpf, "nome": nome, "rg": rg,
-           "nome_mae": nome_mae, "nome_pai": nome_pai, "data_nascimento": data_nascimento,
-           "orgao_expedidor": orgao}
+    out = {"ok": ok, "tipo": "PF", "documento": cpf, "cpf_lido": bool(cpf), "nome": nome,
+           "rg": rg, "nome_mae": nome_mae, "nome_pai": nome_pai,
+           "data_nascimento": data_nascimento, "orgao_expedidor": orgao}
     if not ok:
         out["erro"] = "Não consegui ler o documento. Preencha os campos à mão."
     return out
