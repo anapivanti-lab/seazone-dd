@@ -152,8 +152,13 @@ def itens_para(ctx) -> list[Item]:
 
     # Justiça Federal (mesma página do TRF da região)
     trf = TRF.get(uf)
+    _trf1_ufs = {"BA", "DF", "GO", "MG", "MT", "MA", "PI", "PA", "AM", "AC", "AP", "RO", "RR", "TO"}
     for g in _GRAUS:
-        itens.append(_loc(f"Justiça Federal — {g}", "Justiça Federal", trf, uf_ok, "UF", f"TRF de {onde_uf}"))
+        if g == "Cível 1º grau" and uf in _trf1_ufs:
+            itens.append(Item(f"Justiça Federal — {g}", "Justiça Federal",
+                              modo="auto", provider="Justiça Federal TRF1 — Cível"))
+        else:
+            itens.append(_loc(f"Justiça Federal — {g}", "Justiça Federal", trf, uf_ok, "UF", f"TRF de {onde_uf}"))
 
     # Municipal
     mun = MUNICIPAL.get(muni)
