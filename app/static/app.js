@@ -19,7 +19,8 @@ const docLabel = document.getElementById("docLabel");
 function ajustarTipo() {
   const pf = tipoSel.value === "PF";
   if (docLabel) docLabel.textContent = pf ? "documento de identidade (RG/CNH)" : "Cartão CNPJ";
-  document.querySelectorAll(".pfonly").forEach((el) => (el.hidden = !pf));
+  // usa style.display (vence o display:flex do .linha; o atributo hidden não venceria)
+  document.querySelectorAll(".pfonly").forEach((el) => (el.style.display = pf ? "" : "none"));
 }
 
 // Lê o documento anexado (Cartão CNPJ ou identidade) e preenche os campos
