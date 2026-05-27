@@ -76,10 +76,13 @@ MUNICIPAL = {
 _GRAUS = ["Cível 1º grau", "Cível 2º grau", "Criminal 1º grau", "Criminal 2º grau"]
 
 
-def _abrir_ou_manual(nome: str, grupo: str, url, alvo: str) -> Item:
+def _loc(nome: str, grupo: str, url, preenchido: bool, oque: str, alvo: str) -> Item:
+    """Resolve um item que depende da localização (UF/cidade)."""
+    if not preenchido:
+        return Item(nome, grupo, modo="local", obs=f"Preencha a {oque} acima para liberar.")
     if url:
         return Item(nome, grupo, modo="abrir", url=url)
-    return Item(nome, grupo, modo="manual", obs=f"Site de {alvo} ainda não cadastrado — envie o PDF.")
+    return Item(nome, grupo, modo="manual", obs=f"Site ({alvo}) ainda não cadastrado — envie o PDF.")
 
 
 def itens_para(ctx) -> list[Item]:
@@ -99,28 +102,31 @@ def itens_para(ctx) -> list[Item]:
         itens.append(Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais",
                            modo="abrir", url=_RECEITA_CARTAO))
 
+    uf_ok = bool(uf)
+    muni_ok = bool(muni)
+
     # Estadual (Fazenda) — BA não tem captcha => automático; SC/SP abrem no navegador
     if uf == "BA":
         itens.append(Item("CND Estadual (Fazenda)", "Estaduais", modo="auto",
                           provider="CND Estadual (Fazenda) — BA"))
     else:
-        itens.append(_abrir_ou_manual("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), f"SEFAZ-{onde_uf}"))
+        itens.append(_loc("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), uf_ok, "UF", f"SEFAZ de {onde_uf}"))
 
     # Justiça Estadual (mesma página do TJ cobre os itens)
     tj = TJ.get(uf)
     for g in _GRAUS:
-        itens.append(_abrir_ou_manual(f"Justiça Estadual — {g}", "Justiça Estadual", tj, f"TJ-{onde_uf}"))
+        itens.append(_loc(f"Justiça Estadual — {g}", "Justiça Estadual", tj, uf_ok, "UF", f"TJ de {onde_uf}"))
 
     # Justiça Federal (mesma página do TRF da região)
     trf = TRF.get(uf)
     for g in _GRAUS:
-        itens.append(_abrir_ou_manual(f"Justiça Federal — {g}", "Justiça Federal", trf, f"TRF de {onde_uf}"))
+        itens.append(_loc(f"Justiça Federal — {g}", "Justiça Federal", trf, uf_ok, "UF", f"TRF de {onde_uf}"))
 
     # Municipal
     mun = MUNICIPAL.get(muni)
     if isinstance(mun, dict):
         mun = mun.get(ctx.tipo.value)
-    itens.append(_abrir_ou_manual("CND Municipal", "Municipais", mun, onde_mun))
+    itens.append(_loc("CND Municipal", "Municipais", mun, muni_ok, "cidade", onde_mun))
 
     # Você fornece
     if pj:

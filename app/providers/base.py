@@ -45,6 +45,7 @@ class BaseProvider:
     nome_arquivo: str = "Certidao"  # base do nome do PDF salvo
     URL: str = ""                 # endereço fixo do site
     SELETOR: str = "input[type='text']"  # onde digitar o CNPJ/CPF
+    auto_completo: bool = False   # True = 100% automático, headless (sites sem captcha/login)
 
     def disponivel_para(self, ctx: Contexto) -> bool:
         if ctx.tipo == TipoPessoa.PJ and not self.aplica_pj:
@@ -71,3 +72,8 @@ class BaseProvider:
                 await page.locator(self.SELETOR).first.fill(ctx.documento, timeout=8000)
             except Exception:
                 pass  # se o campo mudou de lugar, você preenche na tela
+
+    async def executar(self, ctx: Contexto, page: "Page"):
+        """Fluxo 100% automático (headless): preenche, emite e devolve o caminho
+        do PDF. Usado apenas quando auto_completo=True."""
+        raise NotImplementedError

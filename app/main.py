@@ -41,7 +41,7 @@ async def checklist(tipo: str, uf: str = "", municipio: str = ""):
     """Lista COMPLETA de documentos da DD (reflete o site certo pela UF/cidade)."""
     ctx = Contexto(tipo=TipoPessoa(tipo), documento="0", uf=uf, municipio=municipio)
     return JSONResponse(
-        [{"nome": it.nome, "grupo": it.grupo, "modo": it.modo} for it in itens_para(ctx)]
+        [{"nome": it.nome, "grupo": it.grupo, "modo": it.modo, "obs": it.obs} for it in itens_para(ctx)]
     )
 
 

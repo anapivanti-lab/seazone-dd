@@ -19,12 +19,14 @@ const META = {
   pendente: ["⏳", "Pendente"],
   aguardando: ["🌐", "Abre automático"],
   executando: ["🔄", "Abrindo…"],
+  local: ["📍", "Preencha a UF/cidade"],
   erro: ["❌", "Erro"],
 };
 
 const MODO = {
   auto: ["🤖", "Automático (captura o PDF)"],
   abrir: ["🌐", "Abre no seu navegador"],
+  local: ["📍", "Preencha a UF/cidade"],
   manual: ["📤", "Envio manual"],
 };
 
@@ -48,7 +50,9 @@ function render(itens, comJob) {
       const acao = comJob
         ? `<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>${p.arquivo ? " 📄" : ""}`
         : "";
-      const obs = comJob && p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : "";
+      const obs = comJob
+        ? (p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : "")
+        : (p.obs ? `<br><span class="obs">${p.obs}</span>` : "");
       html += `<tr><td class="st">${ic} ${tx}</td><td>${p.nome}${obs}</td><td class="ac">${acao}</td></tr>`;
     }
     html += `</tbody></table>`;
