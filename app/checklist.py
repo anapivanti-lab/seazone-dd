@@ -137,12 +137,16 @@ def itens_para(ctx) -> list[Item]:
     else:
         itens.append(_loc("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), uf_ok, "UF", f"SEFAZ de {onde_uf}"))
 
-    # Justiça Estadual (mesma página do TJ cobre os itens)
+    # Justiça Estadual — alguns itens têm provedor que preenche sozinho
     tj = TJ.get(uf)
+    _tj_auto = {
+        ("BA", "Cível 1º grau"): "Justiça Estadual BA — Cível 1º grau",
+        ("GO", "Criminal 1º grau"): "Justiça Estadual GO — Criminal (antecedentes)",
+    }
     for g in _GRAUS:
-        if uf == "BA" and g == "Cível 1º grau":
-            itens.append(Item(f"Justiça Estadual — {g}", "Justiça Estadual",
-                              modo="auto", provider="Justiça Estadual BA — Cível 1º grau"))
+        prov = _tj_auto.get((uf, g))
+        if prov:
+            itens.append(Item(f"Justiça Estadual — {g}", "Justiça Estadual", modo="auto", provider=prov))
         else:
             itens.append(_loc(f"Justiça Estadual — {g}", "Justiça Estadual", tj, uf_ok, "UF", f"TJ de {onde_uf}"))
 
