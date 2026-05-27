@@ -43,6 +43,14 @@ SEFAZ = {
     "SC": "https://sat.sef.sc.gov.br/tax.NET/Sat.CtaCte.Web/SolicitacaoCnd.aspx",
     "BA": "https://servicos.sefaz.ba.gov.br/sistemas/DSCRE/Modulos/Publico/EmissaoCertidao.aspx",
     "SP": "https://www10.fazenda.sp.gov.br/CertidaoNegativaDeb/Pages/EmissaoCertidaoNegativa.aspx",
+    "RS": "https://www.sefaz.rs.gov.br/sat/CertidaoSitFiscalSolic.aspx",
+    "PR": "https://cdwfazenda.paas.pr.gov.br/cdwportal/certidao/automatica",
+    "DF": "https://ww1.receita.fazenda.df.gov.br/cidadao/certidoes/Certidao",
+    "AL": "https://contribuinte.sefaz.al.gov.br/certidao/#/emitir-certidao",
+    "PE": "https://efisco.sefaz.pe.gov.br/sfi_trb_gcc/PREmitirCertidaoRegularidadeFiscalMovel",
+    "MS": "https://servicos.efazenda.ms.gov.br/pndfis/home/emissao",
+    "GO": "https://www.sefaz.go.gov.br/Certidao/Emissao/default.asp",
+    "RJ": "https://www.consultadividaativa.rj.gov.br/RDGWEBLNX/servlet/StartCISPage?PAGEURL=/cisnatural/NatLogon.html&xciParameters.natsession=Solicitar_Certidao",
 }
 
 # --- Justiça Estadual (Tribunal de Justiça), por UF ---
@@ -50,17 +58,27 @@ TJ = {
     "SC": "https://certidoes.tjsc.jus.br/pedidoCertidao",
     "BA": "https://portalcertidoes.tjba.jus.br/#/primeirograu",
     "SP": "https://esaj.tjsp.jus.br/sco/abrirCadastro.do",
+    "RS": "https://www.tjrs.jus.br/novo/processos-e-servicos/servicos-processuais/emissao-de-antecedentes-e-certidoes/",
+    "AL": "https://www2.tjal.jus.br/sco/abrirCadastro.do?servico=810101",
+    "PE": "https://certidoesunificadas.app.tjpe.jus.br/",
+    "MS": "https://esaj.tjms.jus.br/sco/abrirCadastro.do",
+    "GO": "https://projudi.tjgo.jus.br/CertidaoNegativaPositivaPublica?PaginaAtual=1&TipoArea=2&InteressePessoal=S",
+    "DF": "https://cnc.tjdft.jus.br/solicitacao-externa",
 }
 
 # --- Justiça Federal, por região (a certidão cobre toda a região do TRF) ---
-_TRF4 = "https://www2.trf4.jus.br/trf4/processos/certidao/index.php"            # RS, SC, PR
-_TRF1 = "https://sistemas.trf1.jus.br/certidao/#/solicitacao"                   # DF, BA, MG, GO...
+_TRF1 = "https://sistemas.trf1.jus.br/certidao/#/solicitacao"                   # DF, BA, MG, GO, MT...
+_TRF2 = "https://certidoes.trf2.jus.br/certidoes/#/principal/solicitar"         # RJ, ES
 _TRF3 = "https://web.trf3.jus.br/certidao-regional/CertidaoCivelEleitoralCriminal/SolicitarDadosCertidao"  # SP, MS
+_TRF4 = "https://www2.trf4.jus.br/trf4/processos/certidao/index.php"            # RS, SC, PR
+_TRF5 = "https://certidoes.trf5.jus.br/certidoes2022/"                          # AL, PE, CE, PB, RN, SE
 TRF = {
     "SC": _TRF4, "RS": _TRF4, "PR": _TRF4,
-    "BA": _TRF1, "DF": _TRF1, "GO": _TRF1, "MT": _TRF1, "MA": _TRF1, "PI": _TRF1,
-    "PA": _TRF1, "AM": _TRF1, "AC": _TRF1, "AP": _TRF1, "RO": _TRF1, "RR": _TRF1, "TO": _TRF1,
+    "RJ": _TRF2, "ES": _TRF2,
     "SP": _TRF3, "MS": _TRF3,
+    "AL": _TRF5, "PE": _TRF5, "CE": _TRF5, "PB": _TRF5, "RN": _TRF5, "SE": _TRF5,
+    "BA": _TRF1, "DF": _TRF1, "GO": _TRF1, "MG": _TRF1, "MT": _TRF1, "MA": _TRF1,
+    "PI": _TRF1, "PA": _TRF1, "AM": _TRF1, "AC": _TRF1, "AP": _TRF1, "RO": _TRF1, "RR": _TRF1, "TO": _TRF1,
 }
 
 # --- CND Municipal, por município normalizado (str ou {"PJ":..,"PF":..}) ---

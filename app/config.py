@@ -45,3 +45,6 @@ CERT_ORIGINS = [
     "https://esaj.tjsp.jus.br",
     "https://portalcertidoes.tjba.jus.br",
 ]
+
+# E-mail para certidões que só são enviadas por e-mail (alguns sites não baixam direto)
+EMAIL_CERTIDOES = "ana.pivanti@seazone.com.br"
