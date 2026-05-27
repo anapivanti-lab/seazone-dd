@@ -12,6 +12,7 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
+from .busca_municipal import google_url as _google_municipal
 from .checklist import itens_para
 from .cnpj_dados import consultar as consultar_cnpj
 from .config import CERT_ORIGINS, CERT_PFX, CERT_SENHA, PASTA_PERFIL
@@ -68,7 +69,8 @@ class Job:
 JOBS: dict[str, Job] = {}
 
 
-def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
+def criar_job(ctx: Contexto, selecionados: list[str] | None = None,
+              municipal_url: str = "") -> Job:
     selecionados = selecionados or []
     dados = consultar_cnpj(ctx.documento)  # dados grátis do CNPJ (CNAE, situação, sócios, endereço)
     if dados:
@@ -101,6 +103,18 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
         passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url,
                             provider=it.provider, status=status, mensagem=msg,
                             sob_demanda=sob_demanda))
+    # CND Municipal de cidade não cadastrada: aponta para o site achado na busca
+    # (ou para a busca do Google já pronta), virando um item "abrir" com botão.
+    muni = next((p for p in passos if p.grupo == "Municipais"), None)
+    if muni and muni.modo in ("manual", "local") and ctx.municipio:
+        url = municipal_url or _google_municipal(ctx.municipio, ctx.uf)
+        muni.modo, muni.url, muni.sob_demanda, muni.status = "abrir", url, True, "aguardando"
+        muni.mensagem = (
+            "Achei o site da CND Municipal — clique em 'Abrir site' e baixe o PDF."
+            if municipal_url else
+            "Não achei o link exato — abre a busca do Google pronta; clique no site da prefeitura."
+        )
+
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     job.cnpj_dados = dados or {}
     job._lock = asyncio.Lock()  # serializa a abertura do navegador (evita corrida)

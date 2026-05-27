@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from .checklist import itens_para
 from .config import PASTA_PROCESSOS
+from .busca_municipal import buscar as buscar_municipal_site
 from .extrator import extrair_cartao_cnpj, extrair_identidade
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
@@ -61,12 +62,13 @@ async def emitir(
     nome_mae: str = Form(""),
     endereco: str = Form(""),
     data_nascimento: str = Form(""),
+    municipal_url: str = Form(""),
     selecionados: list[str] = Form(default=[]),
 ):
     ctx = Contexto(tipo=TipoPessoa(tipo), documento=documento, nome=nome, uf=uf,
                    municipio=municipio, rg=rg, nome_mae=nome_mae, endereco=endereco,
                    data_nascimento=data_nascimento)
-    job = criar_job(ctx, selecionados)
+    job = criar_job(ctx, selecionados, municipal_url=municipal_url)
     asyncio.create_task(executar_job(job))
     return JSONResponse({"job_id": job.id})
 
@@ -114,6 +116,12 @@ async def parecer(job_id: str):
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
     return JSONResponse(gerar_parecer(job))
+
+
+@app.get("/buscar-municipal")
+async def buscar_municipal(cidade: str, uf: str = ""):
+    """Acha o site oficial da CND Municipal da cidade (+ busca do Google de reserva)."""
+    return JSONResponse(buscar_municipal_site(cidade, uf))
 
 
 @app.post("/ler-documento")

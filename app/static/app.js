@@ -54,6 +54,7 @@ async function lerDocumento() {
     ? "✅ Li o documento. Confira os campos e complete o que faltar (e o endereço)."
     : "⚠️ " + (d.erro || "Não consegui ler tudo.") + " Preencha os campos à mão.";
   carregarChecklist();
+  buscarMunicipal();
 }
 
 tipoSel.addEventListener("change", ajustarTipo);
@@ -139,6 +140,34 @@ tipoSel.addEventListener("change", carregarChecklist);
 form.uf.addEventListener("input", carregarChecklist);
 form.municipio.addEventListener("input", carregarChecklist);
 carregarChecklist();
+
+// Acha o site da CND Municipal assim que você digita a cidade (com atraso)
+const municipalBox = document.getElementById("municipalBox");
+const municipalUrlInput = document.getElementById("municipal_url");
+let municipalTimer = null;
+function buscarMunicipal() {
+  const cid = form.municipio.value.trim();
+  const uf = form.uf.value.trim();
+  if (municipalUrlInput) municipalUrlInput.value = "";
+  clearTimeout(municipalTimer);
+  if (!cid) { if (municipalBox) municipalBox.innerHTML = ""; return; }
+  if (municipalBox) municipalBox.innerHTML = `🔎 Procurando o site da CND Municipal de ${cid}…`;
+  municipalTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`/buscar-municipal?cidade=${encodeURIComponent(cid)}&uf=${encodeURIComponent(uf)}`);
+      const d = await r.json();
+      if (d.url) {
+        if (municipalUrlInput) municipalUrlInput.value = d.url;
+        municipalBox.innerHTML = `🏛️ CND Municipal de ${cid}: <a href="${d.url}" target="_blank" rel="noopener">abrir site oficial</a> — confira se é a página de emissão e baixe o PDF.`;
+      } else {
+        municipalBox.innerHTML = `🏛️ CND Municipal de ${cid}: não achei o link exato — <a href="${d.google}" target="_blank" rel="noopener">abrir busca do Google pronta</a> e clicar no site da prefeitura.`;
+      }
+    } catch (e) {
+      if (municipalBox) municipalBox.innerHTML = "";
+    }
+  }, 900);
+}
+form.municipio.addEventListener("input", buscarMunicipal);
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
