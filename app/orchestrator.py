@@ -25,6 +25,7 @@ class Passo:
     grupo: str = ""
     modo: str = "manual"        # auto | abrir | manual
     url: str | None = None
+    provider: str | None = None
     status: str = "aguardando"  # aguardando|aberta|sucesso|enviado|manual|pendente|erro
     mensagem: str = ""
     arquivo: str | None = None
@@ -67,7 +68,8 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
             status, msg = "manual", (it.obs or "Obtenha o documento e suba o PDF aqui.")
         else:
             status, msg = "aguardando", ""
-        passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url, status=status, mensagem=msg))
+        passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url,
+                            provider=it.provider, status=status, mensagem=msg))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     JOBS[job.id] = job
     return job
@@ -124,8 +126,8 @@ async def executar_job(job: Job) -> None:
                 if passo.url and passo.url not in ja_aberto:
                     os.startfile(passo.url)  # abre no navegador padrão (Windows)
                     ja_aberto.add(passo.url)
-                    passo.mensagem = ("Abri no seu navegador. Valide o captcha, baixe o PDF e clique em "
-                                      "Enviar PDF. (O CNPJ/CPF já está copiado — é só colar.)")
+                    passo.mensagem = ("Abri no seu navegador. Cole o CNPJ/CPF com Ctrl+V, valide o captcha, "
+                                      "baixe o PDF e clique em 'Enviar PDF' aqui.")
                 else:
                     passo.mensagem = ("Mesma página já aberta — uma certidão pode cobrir mais de um item. "
                                       "Baixe e suba o PDF aqui.")
@@ -142,7 +144,11 @@ async def executar_job(job: Job) -> None:
             contexto = await _abrir_navegador(pw)
             job._contexto = contexto
             for passo in auto_items:
-                prov = provedor_por_nome(passo.nome)
+                prov = provedor_por_nome(passo.provider)
+                if prov is None:
+                    passo.status = "erro"
+                    passo.mensagem = "Provedor automático não encontrado."
+                    continue
                 try:
                     page = await contexto.new_page()
                     _ligar_captura(page, prov, passo, job.ctx)

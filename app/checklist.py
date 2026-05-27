@@ -92,15 +92,19 @@ def itens_para(ctx) -> list[Item]:
     itens: list[Item] = [
         Item("CND Federal (Receita/PGFN)", "Federais", modo="abrir", url=_RECEITA_CND),
         Item("CND Trabalhista (TST)", "Federais", modo="auto", provider="CND Trabalhista (TST)"),
-        Item("Certidão de Protestos (CENPROT)", "Federais", modo="auto",
-             provider="Certidão de Protestos (CENPROT)"),
+        Item("Certidão de Protestos (CENPROT)", "Federais", modo="abrir",
+             url="https://www.pesquisaprotesto.com.br/servico/consulta-documento"),
     ]
     if pj:
         itens.append(Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais",
                            modo="abrir", url=_RECEITA_CARTAO))
 
-    # Estadual (Fazenda)
-    itens.append(_abrir_ou_manual("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), f"SEFAZ-{onde_uf}"))
+    # Estadual (Fazenda) — BA não tem captcha => automático; SC/SP abrem no navegador
+    if uf == "BA":
+        itens.append(Item("CND Estadual (Fazenda)", "Estaduais", modo="auto",
+                          provider="CND Estadual (Fazenda) — BA"))
+    else:
+        itens.append(_abrir_ou_manual("CND Estadual (Fazenda)", "Estaduais", SEFAZ.get(uf), f"SEFAZ-{onde_uf}"))
 
     # Justiça Estadual (mesma página do TJ cobre os itens)
     tj = TJ.get(uf)
