@@ -1,8 +1,15 @@
 """Checklist completo de documentos da Due Diligence (todos os tipos).
 
-Itens com 'provider' têm automação (o sistema abre o site). Os demais são
-"manuais": você obtém o documento e sobe o PDF pelo próprio sistema.
-Conforme formos automatizando mais sites, é só preencher o campo 'provider'.
+Cada item tem um MODO:
+  - "auto"   : automação total via navegador controlado (abre e captura o PDF).
+               Precisa de 'provider' (a classe que sabe operar o site).
+  - "abrir"  : abre a página no NAVEGADOR NORMAL da usuária (sem detecção de
+               robô) e copia o documento; ela valida o captcha, baixa e sobe o
+               PDF. Precisa só da 'url'.
+  - "manual" : sem automação ainda (ou pago / sem site eletrônico) -> só upload.
+
+Para automatizar uma certidão nova e fácil, normalmente basta adicionar um item
+com modo="abrir" e a 'url' do site.
 """
 from __future__ import annotations
 
@@ -15,18 +22,23 @@ from .models import TipoPessoa
 class Item:
     nome: str
     grupo: str
+    modo: str = "manual"          # auto | abrir | manual
     aplica_pj: bool = True
     aplica_pf: bool = True
-    provider: str | None = None  # nome do provedor automático, se houver
+    provider: str | None = None   # nome do provedor (quando modo="auto")
+    url: str | None = None        # endereço do site (quando modo="abrir")
+
+
+_RECEITA_CND = "https://servicos.receitafederal.gov.br/servico/certidoes/"
+_RECEITA_CARTAO = "https://servicos.receita.fazenda.gov.br/servicos/cnpjreva/cnpjreva_solicitacao.asp"
 
 
 ITENS = [
-    # Federais / nacionais (com automação)
-    Item("CND Federal (Receita/PGFN)", "Federais", provider="CND Federal (Receita/PGFN)"),
-    Item("CND Trabalhista (TST)", "Federais", provider="CND Trabalhista (TST)"),
-    Item("Certidão de Protestos (CENPROT)", "Federais", provider="Certidão de Protestos (CENPROT)"),
-    Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais", aplica_pf=False,
-         provider="Cartão CNPJ (Comprovante de Inscrição)"),
+    # Federais / nacionais
+    Item("CND Federal (Receita/PGFN)", "Federais", modo="abrir", url=_RECEITA_CND),
+    Item("CND Trabalhista (TST)", "Federais", modo="auto", provider="CND Trabalhista (TST)"),
+    Item("Certidão de Protestos (CENPROT)", "Federais", modo="auto", provider="Certidão de Protestos (CENPROT)"),
+    Item("Cartão CNPJ (Comprovante de Inscrição)", "Federais", modo="abrir", url=_RECEITA_CARTAO, aplica_pf=False),
     # Estaduais — Fazenda
     Item("CND Estadual (Fazenda)", "Estaduais"),
     # Justiça Estadual
@@ -49,9 +61,7 @@ ITENS = [
 
 
 def itens_para(ctx) -> list[Item]:
-    """Filtra os itens da checklist conforme o tipo (PJ/PF)."""
     return [
-        it
-        for it in ITENS
+        it for it in ITENS
         if (it.aplica_pj if ctx.tipo == TipoPessoa.PJ else it.aplica_pf)
     ]

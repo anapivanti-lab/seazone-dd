@@ -22,6 +22,12 @@ const META = {
   erro: ["❌", "Erro"],
 };
 
+const MODO = {
+  auto: ["🤖", "Automático (captura o PDF)"],
+  abrir: ["🌐", "Abre no seu navegador"],
+  manual: ["📤", "Envio manual"],
+};
+
 let jobAtual = null;
 let ultimoRender = "";
 
@@ -37,7 +43,7 @@ function render(itens, comJob) {
       if (comJob) {
         [ic, tx] = META[p.status] || ["•", p.status];
       } else {
-        [ic, tx] = p.auto ? ["🌐", "Abre automático"] : ["📤", "Envio manual"];
+        [ic, tx] = MODO[p.modo] || MODO.manual;
       }
       const acao = comJob
         ? `<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>${p.arquivo ? " 📄" : ""}`

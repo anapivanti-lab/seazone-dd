@@ -1,9 +1,10 @@
-"""Orquestra a DD: monta a checklist completa, abre em abas as certidões que
-têm automação (deixando você concluir os captchas no seu ritmo) e organiza tudo
-numa pasta por franquia. Os documentos sem automação você sobe manualmente."""
+"""Orquestra a DD: monta a checklist completa e processa cada item conforme o
+modo (auto / abrir / manual). Tudo é organizado numa pasta por franquia."""
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,7 +23,8 @@ from .storage import preparar_pasta, salvar_relatorio
 class Passo:
     nome: str
     grupo: str = ""
-    auto: bool = False
+    modo: str = "manual"        # auto | abrir | manual
+    url: str | None = None
     status: str = "aguardando"  # aguardando|aberta|sucesso|enviado|manual|pendente|erro
     mensagem: str = ""
     arquivo: str | None = None
@@ -41,19 +43,13 @@ class Job:
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id,
-            "estado": self.estado,
-            "tipo": self.ctx.tipo.value,
-            "documento": self.ctx.documento,
-            "nome": self.ctx.nome,
-            "uf": self.ctx.uf,
-            "municipio": self.ctx.municipio,
+            "id": self.id, "estado": self.estado, "tipo": self.ctx.tipo.value,
+            "documento": self.ctx.documento, "nome": self.ctx.nome,
+            "uf": self.ctx.uf, "municipio": self.ctx.municipio,
             "pasta": str(self.ctx.pasta_saida),
             "passos": [
-                {
-                    "nome": p.nome, "grupo": p.grupo, "auto": p.auto,
-                    "status": p.status, "mensagem": p.mensagem, "arquivo": p.arquivo,
-                }
+                {"nome": p.nome, "grupo": p.grupo, "modo": p.modo,
+                 "status": p.status, "mensagem": p.mensagem, "arquivo": p.arquivo}
                 for p in self.passos
             ],
         }
@@ -67,17 +63,19 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
     ctx.pasta_saida = preparar_pasta(ctx)
     passos = []
     for it in itens_para(ctx):
-        auto = it.provider is not None and provedor_por_nome(it.provider) is not None
-        passos.append(
-            Passo(
-                nome=it.nome, grupo=it.grupo, auto=auto,
-                status="aguardando" if auto else "manual",
-                mensagem="" if auto else "Obtenha o documento e suba o PDF aqui.",
-            )
-        )
+        status = "manual" if it.modo == "manual" else "aguardando"
+        msg = "Obtenha o documento e suba o PDF aqui." if it.modo == "manual" else ""
+        passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url, status=status, mensagem=msg))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
     JOBS[job.id] = job
     return job
+
+
+def _copiar_clipboard(texto: str) -> None:
+    try:
+        subprocess.run("clip", input=texto, text=True, shell=True, timeout=5)
+    except Exception:
+        pass
 
 
 async def _abrir_navegador(pw):
@@ -90,9 +88,7 @@ async def _abrir_navegador(pw):
         contexto = await pw.chromium.launch_persistent_context(channel="chrome", **comum)
     except Exception:
         contexto = await pw.chromium.launch_persistent_context(**comum)
-    await contexto.add_init_script(
-        "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-    )
+    await contexto.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
     return contexto
 
 
@@ -111,38 +107,52 @@ def _ligar_captura(page, prov, passo, ctx):
 
 async def executar_job(job: Job) -> None:
     job.estado = "executando"
-    abrir = [
+    abrir_items = [p for p in job.passos if p.modo == "abrir"]
+    auto_items = [
         p for p in job.passos
-        if p.auto and (not job.selecionados or p.nome in job.selecionados)
+        if p.modo == "auto" and (not job.selecionados or p.nome in job.selecionados)
     ]
-    if not abrir:
-        job.estado = "aguardando_voce"  # só uploads manuais nesta sessão
-        return
 
-    pw = await async_playwright().start()
-    job._pw = pw
-    try:
-        contexto = await _abrir_navegador(pw)
-    except Exception as e:
-        for p in abrir:
-            p.status = "erro"
-            p.mensagem = f"Não consegui abrir o navegador: {e}"
-        job.estado = "aguardando_voce"
-        await pw.stop()
-        return
-    job._contexto = contexto
+    # 1) "Abrir no navegador normal": sem detecção de robô; copia o documento.
+    if abrir_items:
+        _copiar_clipboard(job.ctx.documento)
+        for passo in abrir_items:
+            try:
+                if passo.url:
+                    os.startfile(passo.url)  # abre no navegador padrão (Windows)
+                passo.status = "aberta"
+                passo.mensagem = ("Abri no seu navegador. Valide o captcha, baixe o PDF e clique em "
+                                  "Enviar PDF. (O CNPJ/CPF já está copiado — é só colar.)")
+            except Exception as e:
+                passo.status = "erro"
+                passo.mensagem = f"Não consegui abrir a página: {e}"
 
-    for passo in abrir:
-        prov = provedor_por_nome(passo.nome)
+    # 2) "Automático": navegador controlado que captura o PDF sozinho.
+    if auto_items:
+        pw = await async_playwright().start()
+        job._pw = pw
         try:
-            page = await contexto.new_page()
-            _ligar_captura(page, prov, passo, job.ctx)
-            await prov.abrir(job.ctx, page)
-            passo.status = "aberta"
-            passo.mensagem = "Aba aberta — conclua no site (captcha + emitir)."
+            contexto = await _abrir_navegador(pw)
+            job._contexto = contexto
+            for passo in auto_items:
+                prov = provedor_por_nome(passo.nome)
+                try:
+                    page = await contexto.new_page()
+                    _ligar_captura(page, prov, passo, job.ctx)
+                    await prov.abrir(job.ctx, page)
+                    passo.status = "aberta"
+                    passo.mensagem = "Aba aberta — resolva o captcha e emita; o PDF é salvo sozinho."
+                except Exception as e:
+                    passo.status = "erro"
+                    passo.mensagem = f"Não consegui abrir o site ({type(e).__name__})."
         except Exception as e:
-            passo.status = "erro"
-            passo.mensagem = f"Não consegui abrir o site ({type(e).__name__})."
+            for passo in auto_items:
+                passo.status = "erro"
+                passo.mensagem = f"Não consegui abrir o navegador: {e}"
+            try:
+                await pw.stop()
+            except Exception:
+                pass
 
     job.estado = "aguardando_voce"
 

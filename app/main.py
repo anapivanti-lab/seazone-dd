@@ -41,7 +41,7 @@ async def checklist(tipo: str):
     """Lista COMPLETA de documentos da DD (para mostrar tudo já na abertura)."""
     ctx = Contexto(tipo=TipoPessoa(tipo), documento="0")
     return JSONResponse(
-        [{"nome": it.nome, "grupo": it.grupo, "auto": it.provider is not None} for it in itens_para(ctx)]
+        [{"nome": it.nome, "grupo": it.grupo, "modo": it.modo} for it in itens_para(ctx)]
     )
 
 
