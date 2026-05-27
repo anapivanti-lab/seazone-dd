@@ -17,7 +17,7 @@ from .extrator import extrair_cartao_cnpj, extrair_identidade
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .ocr import ler as ler_identidade
-from .parecer import gerar as gerar_parecer
+from .parecer import gerar as gerar_parecer, render_relatorio_pdf
 from .orchestrator import JOBS, Passo, abrir_item, concluir_job, criar_job, executar_job
 from .providers import provedores_para
 from .storage import _slug, com_prefixo
@@ -123,7 +123,9 @@ async def parecer(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
-    return JSONResponse(gerar_parecer(job))
+    d = gerar_parecer(job)
+    await render_relatorio_pdf(job.ctx.pasta_saida, d.get("relatorio_html", ""))
+    return JSONResponse(d)
 
 
 @app.get("/buscar-municipal")

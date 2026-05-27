@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -237,7 +238,10 @@ def _analisar_entidade(job) -> dict:
         "papel": papel, "ordem": _ORDEM.get(papel, 3), "tipo": ctx.tipo.value,
         "nome": ctx.nome, "qualificacao": qual,
         "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
-        "docs": [p.nome for p in job.passos if p.arquivo] + [f"Processo: {pr.get('arquivo', '')}" for pr in procs],
+        "documento": ctx.documento,
+        "cnae": dados.get("cnae_codigo", ""), "cnae_desc": dados.get("cnae_descricao", ""),
+        "itens": [{"nome": p.nome, "grupo": p.grupo, "status": p.status,
+                   "arquivo": (Path(p.arquivo).name if p.arquivo else "")} for p in job.passos],
         "positivas": positivas, "prot_positiva": prot_positiva, "crim": crim, "procs": bool(procs),
         "situacao_irregular": irregular, "pendencias": pendencias,
         "total_proc": total_proc, "total_prot": total_prot, "pep": pep_nomes,
@@ -324,6 +328,28 @@ def _conclusao(entidades: list) -> dict:
     return {"risco": "BAIXO", "categoria": "", "texto": TEXTO_OK, "recs": [], "fecho": ""}
 
 
+ARQ_PARECER = "Parecer_Juridico_DD.docx"
+ARQ_RELATORIO = "Relatorio_DD.pdf"
+
+
+def _criterios(entidades: list) -> list:
+    """Os 6 critérios de risco -> (texto, SIM/NÃO/None, observação)."""
+    pos = any(e["positivas"] for e in entidades)
+    crim = any(e["crim"] for e in entidades)
+    prot = any(e["prot_positiva"] for e in entidades)
+    pep = any(e.get("pep") for e in entidades)
+    civel = any(e["procs"] and not e["crim"] for e in entidades)
+    cnae = next((f'{e.get("cnae", "")} {e.get("cnae_desc", "")}'.strip() for e in entidades if e.get("cnae")), "")
+    return [
+        ("Todas as certidões são negativas (ou positivas com efeito de negativa)?", not pos, ""),
+        ("Inexiste processo criminal envolvendo o representante/franquia?", not crim, ""),
+        ("O CNAE utilizado pela franquia está correto?", None, cnae or "conferir manualmente"),
+        ("O representante legal não é pessoa politicamente exposta (PEP)?", not pep, ""),
+        ("Inexistem protestos em nome da franquia/representante?", not prot, ""),
+        ("Inexistem processos cíveis relacionados ao objeto da franquia?", not civel, ""),
+    ]
+
+
 # ---------------------------------------------------------------- montar + salvar
 def gerar(job) -> dict:
     ctx = job.ctx
@@ -333,53 +359,107 @@ def gerar(job) -> dict:
     entidades = _carregar_entidades(pasta) or [ent]
     concl = _conclusao(entidades)
 
-    docs = []
-    for e in entidades:
-        for x in e.get("docs", []):
-            if x not in docs:
-                docs.append(x)
-
     titulo = (next((e.get("nome") for e in entidades if "operador" in e["papel"].lower() and e.get("nome")), None)
               or (entidades[0].get("nome") if entidades else None) or ctx.nome or ctx.documento)
     d = {
-        "titulo": titulo, "id_suporte": ctx.id_suporte, "entidades": entidades, "docs": docs,
+        "titulo": titulo, "id_suporte": ctx.id_suporte, "entidades": entidades,
         "risco": concl["risco"], "concl_categoria": concl["categoria"], "concl_texto": concl["texto"],
         "recomendacoes": concl["recs"], "concl_fecho": concl["fecho"],
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"), "data_extenso": _data_extenso(),
     }
+    # HTML do relatório (vira PDF no endpoint, via Chromium — formato compartilhável)
+    d["relatorio_html"] = _relatorio_html(d, _criterios(entidades))
     d["html"] = _pagina_html(d)
     d["arquivo"] = str(_salvar_docx(pasta, d))
     return d
 
 
+async def render_relatorio_pdf(pasta: Path, html: str) -> None:
+    """Renderiza o relatório (HTML) em PDF (Relatorio_DD.pdf) — formato fácil de
+    compartilhar por link (abre no navegador pra qualquer pessoa)."""
+    if not html:
+        return
+    from playwright.async_api import async_playwright
+    try:
+        pw = await async_playwright().start()
+        try:
+            nav = await pw.chromium.launch()
+            page = await nav.new_page()
+            await page.set_content(html, wait_until="load")
+            await page.pdf(path=str(pasta / ARQ_RELATORIO), format="A4", print_background=True,
+                           margin={"top": "1.2cm", "bottom": "1.2cm", "left": "1.2cm", "right": "1.2cm"})
+            await nav.close()
+        finally:
+            await pw.stop()
+    except Exception:
+        try:  # se o PDF falhar, salva ao menos o HTML
+            (pasta / "Relatorio_DD.html").write_text(html, encoding="utf-8")
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------- WORD (.docx)
+def _rgb(hexcor):
+    from docx.shared import RGBColor
+    h = hexcor.lstrip("#")
+    return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+def _hyperlink(par, url, texto, cor="0B4F6C"):
+    from docx.oxml.shared import OxmlElement, qn
+    rid = par.part.relate_to(
+        url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+    h = OxmlElement("w:hyperlink")
+    h.set(qn("r:id"), rid)
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    c = OxmlElement("w:color")
+    c.set(qn("w:val"), cor)
+    rpr.append(c)
+    u = OxmlElement("w:u")
+    u.set(qn("w:val"), "single")
+    rpr.append(u)
+    run.append(rpr)
+    tt = OxmlElement("w:t")
+    tt.text = texto
+    run.append(tt)
+    h.append(run)
+    par._p.append(h)
+
+
 def _salvar_docx(pasta: Path, d) -> Path:
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
 
-    AZUL = RGBColor(0x0B, 0x4F, 0x6C)
+    AZUL = _rgb("#0b4f6c")
     doc = Document()
     doc.styles["Normal"].font.name = "Calibri"
     doc.styles["Normal"].font.size = Pt(11)
+    for m in doc.sections:
+        m.left_margin = m.right_margin = Pt(64)
 
-    m = doc.add_paragraph()
-    m.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rm = m.add_run("SEAZONE · DEPARTAMENTO JURÍDICO")
-    rm.bold = True
-    rm.font.size = Pt(9)
-    rm.font.color.rgb = AZUL
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    cab = f"PARECER JURÍDICO — DUE DILIGENCE"
-    if d["id_suporte"]:
-        cab += f" (#{d['id_suporte']})"
-    rt = t.add_run(f"{cab}\n{d['titulo']}")
+    cab = "PARECER JURÍDICO — DUE DILIGENCE" + (f"  (#{d['id_suporte']})" if d["id_suporte"] else "")
+    rt = t.add_run(cab)
     rt.bold = True
-    rt.font.size = Pt(14)
+    rt.font.size = Pt(15)
+    rt.font.color.rgb = AZUL
+    sub = doc.add_paragraph()
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rs = sub.add_run(d["titulo"])
+    rs.bold = True
+    rs.font.size = Pt(12)
+    rk = doc.add_paragraph()
+    rk.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rr = rk.add_run(f"Risco: {d['risco']}")
+    rr.bold = True
+    rr.font.color.rgb = _rgb(_CORES.get(d["risco"], "#0b4f6c"))
 
     def secao(txt):
         p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(10)
         r = p.add_run(txt)
         r.bold = True
         r.font.size = Pt(12)
@@ -388,32 +468,34 @@ def _salvar_docx(pasta: Path, d) -> Path:
     def label(lbl, texto, recuo=False):
         p = doc.add_paragraph()
         if recuo:
-            p.paragraph_format.left_indent = Pt(14)
+            p.paragraph_format.left_indent = Pt(16)
         p.add_run(lbl + " ").bold = True
         if texto:
             p.add_run(texto)
 
-    secao("QUALIFICAÇÃO")
+    secao("1. Qualificação")
     for e in d["entidades"]:
         label(e["papel"] + ":", e["qualificacao"])
 
-    secao("DOCUMENTOS ANALISADOS")
-    for x in (d["docs"] or ["(documentos conforme emitidos/anexados)"]):
-        doc.add_paragraph(x, style="List Bullet")
+    secao("2. Documentos analisados")
+    p = doc.add_paragraph()
+    p.add_run("As certidões e documentos analisados (com os links) constam no ")
+    _hyperlink(p, ARQ_RELATORIO, "Relatório da DD")
+    p.add_run(".")
 
-    secao("PARECER")
+    secao("3. Parecer")
     for e in d["entidades"]:
-        p = doc.add_paragraph()
-        rr = p.add_run(e["papel"])
-        rr.bold = True
-        rr.underline = True
+        pe = doc.add_paragraph()
+        re_ = pe.add_run(e["papel"])
+        re_.bold = True
+        re_.underline = True
         label("Certidões:", e["certidoes_txt"], recuo=True)
         label("Processos:", e["processos_txt"], recuo=True)
         label("Protestos:", e["protestos_txt"], recuo=True)
         if e["pendencias_txt"]:
             label("Pendências:", e["pendencias_txt"], recuo=True)
 
-    secao("CONCLUSÃO")
+    secao("4. Conclusão")
     if d["concl_categoria"]:
         label(d["concl_categoria"] + ":", d["concl_texto"])
         doc.add_paragraph().add_run("Recomendação:").bold = True
@@ -425,17 +507,13 @@ def _salvar_docx(pasta: Path, d) -> Path:
         doc.add_paragraph(d["concl_texto"])
 
     doc.add_paragraph()
-    a = doc.add_paragraph()
-    a.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    a.add_run(f"{d['data_extenso']}\n\n____________________________________\n")
-    a.add_run("Departamento Jurídico — Seazone").bold = True
-    rod = doc.add_paragraph()
-    rr = rod.add_run(f"Documento gerado automaticamente pelo sistema de Due Diligence em {d['gerado_em']}. "
-                     "Revise e ajuste antes de encaminhar ao setor de Franquias.")
-    rr.font.size = Pt(8)
-    rr.font.color.rgb = RGBColor(0x8A, 0x97, 0xA3)
+    dt = doc.add_paragraph()
+    dt.add_run(d["data_extenso"])
+    rel = doc.add_paragraph()
+    rel.add_run("Relatório completo da DD (checklist e links das certidões): ")
+    _hyperlink(rel, ARQ_RELATORIO, "abrir Relatório")
 
-    destino = pasta / "Parecer_Juridico_DD.docx"
+    destino = pasta / ARQ_PARECER
     doc.save(str(destino))
     return destino
 
@@ -444,21 +522,22 @@ def _salvar_docx(pasta: Path, d) -> Path:
 _ESTILO = """
 body{font-family:Georgia,'Times New Roman',serif;color:#1a2332;max-width:820px;margin:1rem auto;line-height:1.65;padding:0 1.4rem;background:#fff}
 .cab{text-align:center;border-bottom:3px solid #0b4f6c;padding-bottom:.8rem;margin-bottom:1rem}
-.marca{color:#0b4f6c;font-weight:700;letter-spacing:2px;font-size:.78rem}
+.cab h1{color:#0b4f6c;font-size:1.25rem;margin:.2rem 0}
+.titulo{font-weight:600;font-size:1.05rem;margin:.2rem 0}
 h1{font-size:1.15rem;margin:.5rem 0 .8rem;font-weight:700}
 h2{font-size:1.0rem;color:#0b4f6c;border-bottom:1px solid #d3dde3;padding-bottom:.2rem;margin:1.3rem 0 .5rem}
 p{text-align:justify;margin:.35rem 0}.q b{color:#0b4f6c}
+a{color:#0b6;font-weight:600}
 .ent{font-weight:700;margin-top:.7rem;text-decoration:underline}
 .sub{font-weight:700;margin:.45rem 0 .1rem;padding-left:.6rem}
-.badge{display:inline-block;padding:.2rem .9rem;border-radius:999px;color:#fff;font-weight:700;font-size:.8rem}
+.badge{display:inline-block;padding:.25rem 1rem;border-radius:999px;color:#fff;font-weight:700;font-size:.85rem;margin-top:.3rem}
 ul,ol{margin:.3rem 0 .3rem 1.2rem}.rec li{margin:.25rem 0}
-.assinatura{margin-top:2rem;text-align:center}.rodape{margin-top:1.4rem;color:#8a97a3;font-size:.74rem;border-top:1px solid #eee;padding-top:.5rem}
+.fim{margin-top:1.2rem;color:#333}
 """
 
 
 def _corpo_html(d) -> str:
     cor = _CORES.get(d["risco"], "#1a7d3c")
-    docs = "".join(f"<li>{x}</li>" for x in d["docs"]) or "<li>(documentos conforme emitidos/anexados)</li>"
     quals = "".join(f'<p class="q"><b>{e["papel"]}:</b> {e["qualificacao"]}</p>' for e in d["entidades"])
     blocos = ""
     for e in d["entidades"]:
@@ -474,18 +553,20 @@ def _corpo_html(d) -> str:
                  f'<p class="sub" style="padding-left:0">Recomendação:</p><ol class="rec">{recs}</ol>{fecho}')
     else:
         concl = f"<p>{d['concl_texto']}</p>"
-    idtxt = f" (#{d['id_suporte']})" if d["id_suporte"] else ""
+    idtxt = f" · #{d['id_suporte']}" if d["id_suporte"] else ""
     return f"""
-    <div class="cab"><div class="marca">SEAZONE · DEPARTAMENTO JURÍDICO</div>
-      <h1>PARECER JURÍDICO — DUE DILIGENCE{idtxt}<br>{d['titulo']}</h1>
-      <span class="badge" style="background:{cor}">Risco: {d['risco']}</span></div>
+    <div class="cab">
+      <h1>Parecer Jurídico — Due Diligence{idtxt}</h1>
+      <p class="titulo">{d['titulo']}</p>
+      <span class="badge" style="background:{cor}">Risco: {d['risco']}</span>
+    </div>
     <h2>1. Qualificação</h2>{quals}
-    <h2>2. Documentos analisados</h2><ul>{docs}</ul>
+    <h2>2. Documentos analisados</h2>
+    <p>As certidões e documentos analisados (com os links) constam no <a href="{ARQ_RELATORIO}">Relatório da DD</a>.</p>
     <h2>3. Parecer</h2>{blocos}
     <h2>4. Conclusão</h2>{concl}
-    <p class="assinatura">{d['data_extenso']}<br><br>____________________________________<br><b>Departamento Jurídico — Seazone</b></p>
-    <p class="rodape">Documento gerado automaticamente em {d['gerado_em']}. O arquivo editável está salvo como
-      <b>Parecer_Juridico_DD.docx</b> na pasta da DD.</p>
+    <p class="fim">{d['data_extenso']}</p>
+    <p class="fim"><a href="{ARQ_RELATORIO}">Abrir o Relatório completo da DD ↗</a></p>
     """
 
 
@@ -493,3 +574,97 @@ def _pagina_html(d) -> str:
     return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
             f'<title>Parecer Jurídico — {d["titulo"]}</title>'
             f"<style>{_ESTILO}</style></head><body>{_corpo_html(d)}</body></html>")
+
+
+# ---------------------------------------------------------------- RELATÓRIO (HTML)
+_SIT = {
+    "sucesso": ("✅", "Emitida", "#1a7d3c"), "enviado": ("✅", "Enviada", "#1a7d3c"),
+    "manual": ("📤", "Falta enviar", "#b8860b"), "aberta": ("📂", "Em aberto", "#b8860b"),
+    "pendente": ("⏳", "Pendente", "#b8860b"), "aguardando": ("•", "Pendente", "#8a97a3"),
+    "local": ("📍", "Falta UF/cidade", "#b8860b"), "erro": ("❌", "Erro", "#c0392b"),
+}
+
+_RELATORIO_ESTILO = """
+body{font-family:'Segoe UI',Arial,sans-serif;color:#1a2332;max-width:900px;margin:1.2rem auto;padding:0 1.4rem;background:#f4f6f8}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:1.4rem 1.6rem;margin-bottom:1.2rem}
+.cab{text-align:center;border-bottom:3px solid #0b4f6c;padding-bottom:.9rem}
+.cab h1{color:#0b4f6c;margin:.2rem 0;font-size:1.3rem}
+.cab .titulo{font-size:1.05rem;font-weight:600;margin:.2rem 0}
+.cab .data{color:#8a97a3;font-size:.85rem}
+.badge{display:inline-block;padding:.3rem 1rem;border-radius:999px;color:#fff;font-weight:700;font-size:.9rem;margin-top:.4rem}
+.ident-item{margin:.25rem 0}.muted{color:#8a97a3}
+h2{color:#0b4f6c;font-size:1.05rem;margin:.2rem 0 .6rem;border-bottom:1px solid #e3e6ea;padding-bottom:.25rem}
+table.rel{border-collapse:collapse;width:100%}
+table.rel th,table.rel td{border:1px solid #e3e6ea;padding:.5rem .6rem;text-align:left;font-size:.9rem}
+table.rel th{background:#eef3f7;color:#0b4f6c}
+table.rel a{color:#0b6;font-weight:600;text-decoration:none}table.rel a:hover{text-decoration:underline}
+.arq{font-family:Consolas,monospace;font-size:.8rem;color:#5a6b7a;word-break:break-all}
+.sub{font-weight:700;margin:.5rem 0 .2rem}
+ol{margin:.3rem 0 .3rem 1.2rem}ol li{margin:.25rem 0}
+.btn-parecer{display:inline-block;background:#0b4f6c;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-weight:700;text-decoration:none;margin-top:.4rem}
+.rodape{color:#8a97a3;font-size:.78rem;text-align:center;margin-top:.5rem}
+"""
+
+
+def _relatorio_html(d, criterios) -> str:
+    cor = _CORES.get(d["risco"], "#1a7d3c")
+    idtxt = f" · #{d['id_suporte']}" if d["id_suporte"] else ""
+
+    ident = ""
+    for e in d["entidades"]:
+        lbl = "CNPJ" if e["tipo"] == "PJ" else "CPF"
+        ident += (f'<div class="ident-item"><b>{e["papel"]}:</b> {e.get("nome") or "—"} '
+                  f'<span class="muted">({lbl} {_fmt(e.get("documento", ""), e["tipo"] == "PJ")})</span></div>')
+
+    tabelas = ""
+    for e in d["entidades"]:
+        linhas = ""
+        for it in e.get("itens", []):
+            ic, txt, c = _SIT.get(it["status"], ("•", it["status"], "#8a97a3"))
+            arq = f'<span class="arq">{it["arquivo"]}</span>' if it["arquivo"] else "—"
+            linhas += (f'<tr><td>{it["nome"]}</td>'
+                       f'<td style="color:{c};white-space:nowrap">{ic} {txt}</td><td>{arq}</td></tr>')
+        tabelas += (f'<div class="card"><h2>{e["papel"]}</h2>'
+                    f'<table class="rel"><tr><th>Documento / Certidão</th><th>Situação</th><th>Arquivo na pasta</th></tr>'
+                    f'{linhas}</table></div>')
+
+    crit = ""
+    for txt, val, obs in criterios:
+        if val is True:
+            resp = '<b style="color:#1a7d3c">SIM</b>'
+        elif val is False:
+            resp = '<b style="color:#c0392b">NÃO</b>'
+        else:
+            resp = f'<b style="color:#b8860b">Conferir</b>{(" — " + obs) if obs else ""}'
+        crit += f'<tr><td>{txt}</td><td style="white-space:nowrap">{resp}</td></tr>'
+
+    if d["recomendacoes"]:
+        recs = "<p class='sub'>Recomendações:</p><ol>" + "".join(f"<li>{r}</li>" for r in d["recomendacoes"]) + "</ol>"
+    elif d["risco"] == "MÉDIO":
+        recs = f"<p>{d['concl_texto']}</p>"
+    else:
+        recs = "<p>Não há impedimentos — pode seguir com a contratação.</p>"
+
+    corpo = f"""
+    <div class="card cab">
+      <h1>Relatório de Due Diligence{idtxt}</h1>
+      <p class="titulo">{d['titulo']}</p>
+      <span class="badge" style="background:{cor}">Risco: {d['risco']}</span>
+      <p class="data">Gerado em {d['gerado_em']}</p>
+    </div>
+    <div class="card"><h2>Identificação</h2>{ident}</div>
+    {tabelas}
+    <div class="card"><h2>Critérios de risco</h2>
+      <table class="rel"><tr><th>Critério</th><th>Resposta</th></tr>{crit}</table>
+    </div>
+    <div class="card"><h2>Conclusão</h2>
+      <p>Risco: <b style="color:{cor}">{d['risco']}</b>.</p>{recs}
+      <p>📄 <b>Parecer Jurídico:</b> arquivo <b>{ARQ_PARECER}</b> (na mesma pasta da DD).</p>
+    </div>
+    <div class="card" style="background:#eef6ff"><b>Para compartilhar:</b> envie o link desta
+      pasta no Google Drive — ela contém este relatório, o parecer e todas as certidões listadas acima.</div>
+    <p class="rodape">Documento gerado automaticamente — revise antes de encaminhar ao setor de Franquias.</p>
+    """
+    return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
+            f'<title>Relatório DD — {d["titulo"]}</title>'
+            f"<style>{_RELATORIO_ESTILO}</style></head><body>{corpo}</body></html>")
