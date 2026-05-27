@@ -2,14 +2,15 @@
 
 - PJ → Cartão CNPJ: pega o número do CNPJ e completa razão social, endereço, UF e
   município pela BrasilAPI (mais confiável do que ler o PDF inteiro).
-- PF → Identidade (RG/CNH): OCR + heurística para CPF, RG, nome, nome da mãe/pai e
-  data de nascimento.
+- PF → Identidade (RG/CNH): OCR (português + inglês juntos, mais robusto) +
+  heurística para CPF, RG, nome, nome da mãe/pai e data de nascimento.
 
-Lê tanto PDF de texto (pypdf) quanto PDF escaneado/foto (Tesseract, renderizando as
-páginas com o PyMuPDF). É best-effort: o que não vier legível, você completa na tela.
+Lê PDF de texto (pypdf) e PDF escaneado/foto (Tesseract, renderizando as páginas
+com o PyMuPDF). É best-effort: o que não vier legível, você completa na tela.
 """
 from __future__ import annotations
 
+import datetime
 import io
 import re
 from pathlib import Path
@@ -20,7 +21,7 @@ from .ocr import _tesseract_cmd
 IMG_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif"}
 
 
-def _ocr_imagem(img) -> str:
+def _ocr_imagem(img, lang: str = "por") -> str:
     cmd = _tesseract_cmd()
     if not cmd:
         return ""
@@ -28,32 +29,32 @@ def _ocr_imagem(img) -> str:
         import pytesseract
         pytesseract.pytesseract.tesseract_cmd = cmd
         try:
-            return pytesseract.image_to_string(img, lang="por")
+            return pytesseract.image_to_string(img, lang=lang)
         except Exception:
             return pytesseract.image_to_string(img)
     except Exception:
         return ""
 
 
-def _ocr_de_pdf(caminho: str) -> str:
-    """Renderiza cada página do PDF como imagem (PyMuPDF) e faz OCR — pega dados
-    que estão em IMAGEM dentro do PDF (ex.: CNH Digital, RG escaneado)."""
+def _ocr_de_pdf(caminho: str, langs=("por",)) -> str:
+    """Renderiza cada página do PDF como imagem (PyMuPDF) e faz OCR em cada idioma
+    pedido — pega dados que estão em IMAGEM dentro do PDF (CNH Digital, RG)."""
     try:
         import fitz  # PyMuPDF
         from PIL import Image
         doc = fitz.open(caminho)
         partes = []
         for page in doc:
-            pix = page.get_pixmap(dpi=300)
-            partes.append(_ocr_imagem(Image.open(io.BytesIO(pix.tobytes("png")))))
+            img = Image.open(io.BytesIO(page.get_pixmap(dpi=300).tobytes("png")))
+            for lang in langs:
+                partes.append(_ocr_imagem(img, lang))
         doc.close()
         return "\n".join(partes).strip()
     except Exception:
         return ""
 
 
-def _texto_de_pdf(caminho: str, ocr: bool = False) -> str:
-    # 1) texto direto (Cartão CNPJ costuma ser PDF de texto)
+def _texto_de_pdf(caminho: str, ocr: bool = False, langs=("por",)) -> str:
     texto = ""
     try:
         from pypdf import PdfReader
@@ -61,27 +62,27 @@ def _texto_de_pdf(caminho: str, ocr: bool = False) -> str:
         texto = "\n".join((p.extract_text() or "") for p in r.pages)
     except Exception:
         texto = ""
-    # 2) faz OCR da imagem se pedido (ex.: identidade) OU se não veio texto útil.
-    #    Em PDFs de identidade o texto costuma ser só o rodapé/assinatura — os dados
-    #    reais estão na imagem; por isso o OCR vem PRIMEIRO no resultado.
+    # OCR da imagem se pedido (identidade) ou se não veio texto útil. Em documentos
+    # de identidade o texto do PDF é só o rodapé; os dados reais estão na imagem.
     if ocr or len(texto.strip()) < 40:
-        ocr_txt = _ocr_de_pdf(caminho)
+        ocr_txt = _ocr_de_pdf(caminho, langs=langs)
         if ocr_txt:
             texto = ocr_txt + "\n" + texto
     return texto
 
 
-def _texto_documento(caminho: str, ocr: bool = False) -> str:
+def _texto_documento(caminho: str, ocr: bool = False, langs=("por",)) -> str:
     ext = Path(caminho).suffix.lower()
     if ext == ".pdf":
-        return _texto_de_pdf(caminho, ocr=ocr)
+        return _texto_de_pdf(caminho, ocr=ocr, langs=langs)
     if ext in IMG_EXT:
         try:
             from PIL import Image
-            return _ocr_imagem(Image.open(caminho))
+            img = Image.open(caminho)
+            return "\n".join(_ocr_imagem(img, lang) for lang in langs)
         except Exception:
             return ""
-    return _texto_de_pdf(caminho, ocr=ocr)  # desconhecido: tenta como PDF
+    return _texto_de_pdf(caminho, ocr=ocr, langs=langs)
 
 
 def extrair_cartao_cnpj(caminho: str) -> dict:
@@ -115,25 +116,37 @@ def _limpar_nome(s: str) -> str:
 
 def extrair_identidade(caminho: str) -> dict:
     """Lê RG/CNH e devolve CPF, RG, nome, nome da mãe/pai e data de nascimento.
-    Sempre faz OCR (em CNH/RG os dados ficam na imagem, não no texto do PDF)."""
-    texto = _texto_documento(caminho, ocr=True)
+    Faz OCR em português E inglês (mais robusto) — os dados ficam na imagem."""
+    texto = _texto_documento(caminho, ocr=True, langs=("por", "eng"))
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     plano = " ".join(texto.split())
 
-    cpf = ""
-    m = re.search(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b", plano)
-    if m:
-        cpf = re.sub(r"\D", "", m.group(0))
+    # CPF: só no formato com pontos/traço (evita pegar o nº de registro da CNH)
+    cpfs = re.findall(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", plano)
+    cpf = re.sub(r"\D", "", cpfs[0]) if cpfs else ""
 
+    # RG / nº do documento de identidade
     rg = ""
     m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|DOC[.\s/]*IDENTIDADE|IDENTIDADE)[^\d]{0,30}(\d[\d.\-]{5,12}\w?)",
                   texto, re.I)
     if m:
         rg = m.group(1).strip(" .-")
 
-    mnasc = re.search(r"NASC\w*\D{0,20}(\d{2}/\d{2}/\d{4})", texto, re.I)
-    datas = re.findall(r"\b\d{2}/\d{2}/\d{4}\b", plano)
-    data_nascimento = mnasc.group(1) if mnasc else (datas[0] if datas else "")
+    # Data de nascimento: a data mais antiga plausível (>= 16 anos atrás).
+    # Assim evita confundir com validade / 1ª habilitação / data de emissão.
+    ano_max = datetime.date.today().year - 16
+    cands = []
+    for dd, mm, yy in re.findall(r"\b(\d{2})/(\d{2})/(\d{4})\b", plano):
+        y, mth, d = int(yy), int(mm), int(dd)
+        if 1920 <= y <= ano_max and 1 <= mth <= 12 and 1 <= d <= 31:
+            cands.append((y, mth, d, f"{dd}/{mm}/{yy}"))
+    mnasc = re.search(r"NASC\w*\D{0,20}(\d{2})/(\d{2})/(\d{4})", texto, re.I)
+    if mnasc and 1920 <= int(mnasc.group(3)) <= ano_max:
+        data_nascimento = f"{mnasc.group(1)}/{mnasc.group(2)}/{mnasc.group(3)}"
+    elif cands:
+        data_nascimento = sorted(cands)[0][3]  # ano mais antigo = nascimento
+    else:
+        data_nascimento = ""
 
     def _eh_nome(s):
         return bool(re.search(r"[A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú]{2,}", s))

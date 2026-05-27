@@ -24,8 +24,15 @@ echo [2/3] Instalando bibliotecas (pode demorar alguns minutos)...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 
-echo [3/3] Instalando o navegador da automacao (Chromium)...
+echo [3/4] Instalando o navegador da automacao (Chromium)...
 ".venv\Scripts\python.exe" -m playwright install chromium
+
+echo [4/4] Baixando o pacote de portugues do leitor (OCR de documentos)...
+if not exist "dados\tessdata" mkdir "dados\tessdata"
+if not exist "dados\tessdata\por.traineddata" (
+    powershell -NoProfile -Command "try { Invoke-WebRequest 'https://github.com/tesseract-ocr/tessdata/raw/main/por.traineddata' -OutFile 'dados\tessdata\por.traineddata' -UseBasicParsing } catch { Write-Host '[aviso] Nao consegui baixar o portugues do OCR; a leitura usara ingles.' }"
+)
+if not exist "dados\tessdata\eng.traineddata" if exist "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" copy "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" "dados\tessdata\eng.traineddata" >nul
 
 echo.
 echo ============================================

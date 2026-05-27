@@ -4,9 +4,16 @@ a imagem precisa estar legível, e você confere/corrige o que vier.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
+
+# Usa o pacote de português (por.traineddata) que fica em dados/tessdata, se houver
+# — melhora muito a leitura de documentos brasileiros (acentos, nomes).
+_TESSDATA = Path(__file__).resolve().parent.parent / "dados" / "tessdata"
+if (_TESSDATA / "por.traineddata").exists():
+    os.environ["TESSDATA_PREFIX"] = str(_TESSDATA)
 
 
 def _tesseract_cmd():

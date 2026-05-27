@@ -21,6 +21,10 @@ function ajustarTipo() {
   if (docLabel) docLabel.textContent = pf ? "documento de identidade (RG/CNH)" : "Cartão CNPJ";
   // usa style.display (vence o display:flex do .linha; o atributo hidden não venceria)
   document.querySelectorAll(".pfonly").forEach((el) => (el.style.display = pf ? "" : "none"));
+  // placeholders: no PJ os dados vêm do documento; no PF você digita cidade/UF/nome
+  if (form.municipio) form.municipio.placeholder = pf ? "digite a cidade" : "(vem do documento)";
+  if (form.uf) form.uf.placeholder = pf ? "UF" : "(doc)";
+  if (form.nome) form.nome.placeholder = pf ? "(complete se não vier)" : "(vem do documento)";
 }
 
 // Lê o documento anexado (Cartão CNPJ ou identidade) e preenche os campos
