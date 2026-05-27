@@ -289,7 +289,7 @@ btnParecer.addEventListener("click", async () => {
 
 function renderParecer(d) {
   parecerBox.innerHTML = `<iframe id="pframe" style="width:100%;height:640px;border:1px solid #d3dde3;border-radius:8px;background:#fff"></iframe>
-    <p class="obs">📄 Salvo como <b>Parecer_Juridico_DD.html</b> na pasta da franquia (abre no navegador ou Word). Revise e ajuste antes de enviar ao setor de Franquias.</p>`;
+    <p class="obs">📄 Salvo como <b>Parecer_Juridico_DD.docx</b> (Word <b>editável</b>) na pasta da franquia — abra pelo botão "Abrir pasta dos PDFs". Revise e ajuste antes de enviar ao setor de Franquias.</p>`;
   const f = document.getElementById("pframe");
   if (f) f.srcdoc = d.html || "";
 }
