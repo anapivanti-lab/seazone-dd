@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=24">
+  <link rel="stylesheet" href="/static/style.css?v=25">
 </head>
 <body>
   <header>
@@ -15,12 +15,22 @@
   <main>
     <form id="form">
       <div class="linha">
-        <label>Tipo
-          <select name="tipo" id="tipo">
-            <option value="PJ">Franquia (CNPJ)</option>
-            <option value="PF">Operador / Representante (CPF)</option>
-          </select>
+        <label>ID Suporte (Pipefy)
+          <input name="id_suporte" id="id_suporte" placeholder="Ex.: 3081">
         </label>
+        <label class="cresce">Nome do operador <span class="obs">(nomeia a pasta da DD)</span>
+          <input name="operador" id="operador" placeholder="Ex.: Ana Carla de Aguiar Lopes">
+        </label>
+      </div>
+      <label style="display:block;margin:.4rem 0">
+        <input type="checkbox" id="mesmaPessoa" checked>
+        O representante legal e o operador são a mesma pessoa?
+      </label>
+      <div class="linha">
+        <label>Papel
+          <select name="papel" id="papel"></select>
+        </label>
+        <input type="hidden" name="tipo" id="tipo">
         <label class="cresce">📎 Anexe o <b id="docLabel">Cartão CNPJ</b> (imagem ou PDF)
           <input id="docFile" type="file" accept="image/*,application/pdf">
         </label>
@@ -111,6 +121,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=24"></script>
+  <script src="/static/app.js?v=25"></script>
 </body>
 </html>

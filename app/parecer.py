@@ -248,6 +248,7 @@ def gerar(job) -> dict:
     d = {
         "tipo": ctx.tipo.value, "nome": ctx.nome, "documento": ctx.documento,
         "risco": risco, "secao_principal": "Franquia" if pj else "Operador",
+        "rotulo_pf": (ctx.papel if (not pj and ctx.papel) else "Operador"),
         "qual_franquia": _qual_franquia(ctx, dados), "qual_operador": _qual_operador(ctx, dados),
         "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
         "concl_categoria": categoria, "concl_texto": concl_texto, "recomendacoes": recomendacoes, "concl_fecho": fecho,
@@ -313,7 +314,7 @@ def _salvar_docx(job, d) -> Path:
         return p
 
     label("Franquia:", d["qual_franquia"])
-    label("Operador:", d["qual_operador"])
+    label(d["rotulo_pf"] + ":", d["qual_operador"])
 
     secao("DOCUMENTOS ANALISADOS")
     for x in (d["docs_analisados"] or ["(documentos conforme emitidos/anexados)"]):
@@ -325,7 +326,7 @@ def _salvar_docx(job, d) -> Path:
     if d["secao_principal"] == "Franquia":
         for lbl, txt in _analise_pares(d):
             label(lbl, txt, recuo=True)
-    label("Operador", "" if d["secao_principal"] == "Operador" else
+    label(d["rotulo_pf"], "" if d["secao_principal"] == "Operador" else
           "Documentação do(s) sócio(s)/representante(s) a ser analisada individualmente.")
     if d["secao_principal"] == "Operador":
         for lbl, txt in _analise_pares(d):
@@ -355,7 +356,8 @@ def _salvar_docx(job, d) -> Path:
     rr.font.size = Pt(8)
     rr.font.color.rgb = RGBColor(0x8A, 0x97, 0xA3)
 
-    destino = job.ctx.pasta_saida / "Parecer_Juridico_DD.docx"
+    from .storage import com_prefixo
+    destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, "Parecer_Juridico_DD") + ".docx")
     doc.save(str(destino))
     return destino
 
@@ -403,12 +405,12 @@ def _corpo_html(d) -> str:
       <span class="badge" style="background:{cor}">Risco: {d['risco']}</span></div>
     <h2>1. Qualificação</h2>
     <p class="q"><b>Franquia:</b> {d['qual_franquia']}</p>
-    <p class="q"><b>Operador:</b> {d['qual_operador']}</p>
+    <p class="q"><b>{d['rotulo_pf']}:</b> {d['qual_operador']}</p>
     <h2>2. Documentos analisados</h2><ul>{docs}</ul>
     <p class="obs2">Dados cadastrais: {d['tipo']}{sit}{cnae}.</p>
     <h2>3. Parecer</h2>
     <p class="ent">Franquia</p>{franquia}
-    <p class="ent">Operador</p>{operador}
+    <p class="ent">{d['rotulo_pf']}</p>{operador}
     <h2>4. Conclusão</h2>{concl}
     <p class="assinatura">{d['data_extenso']}<br><br>____________________________________<br><b>Departamento Jurídico — Seazone</b></p>
     <p class="rodape">Documento gerado automaticamente em {d['gerado_em']}. O arquivo editável está salvo como

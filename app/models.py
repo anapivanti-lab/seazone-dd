@@ -42,6 +42,9 @@ class Contexto:
     orgao_expedidor: str = ""    # órgão expedidor do RG (vem da identidade)
     nome_pai: str = ""           # nome do pai (vem da identidade)
     nacionalidade: str = "Brasileira"
+    papel: str = ""              # "Franquia" | "Representante legal" | "Operador"
+    id_suporte: str = ""         # ID do chamado no Pipefy (nomeia a pasta da DD)
+    operador: str = ""           # nome do operador (nomeia a pasta da DD)
     pasta_saida: Optional[Path] = None
 
     def __post_init__(self):

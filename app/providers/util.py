@@ -6,9 +6,10 @@ from pathlib import Path
 
 
 def caminho_saida(ctx, nome_base: str, ext: str) -> Path:
-    """Monta o caminho do arquivo dentro da pasta da franquia, com data."""
+    """Monta o caminho do arquivo dentro da pasta da DD, com prefixo do papel e data."""
+    from ..storage import com_prefixo
     carimbo = datetime.now().strftime("%Y%m%d")
-    nome = f"{nome_base}_{carimbo}.{ext.lstrip('.')}"
+    nome = com_prefixo(ctx, f"{nome_base}_{carimbo}.{ext.lstrip('.')}")
     destino = ctx.pasta_saida / nome
     destino.parent.mkdir(parents=True, exist_ok=True)
     return destino

@@ -20,7 +20,7 @@ from .ocr import ler as ler_identidade
 from .parecer import gerar as gerar_parecer
 from .orchestrator import JOBS, Passo, abrir_item, concluir_job, criar_job, executar_job
 from .providers import provedores_para
-from .storage import _slug
+from .storage import _slug, com_prefixo
 
 BASE = Path(__file__).parent
 app = FastAPI(title="DD Franquias — Seazone")
@@ -65,13 +65,17 @@ async def emitir(
     estado_civil: str = Form(""),
     orgao_expedidor: str = Form(""),
     nome_pai: str = Form(""),
+    papel: str = Form(""),
+    id_suporte: str = Form(""),
+    operador: str = Form(""),
     municipal_url: str = Form(""),
     selecionados: list[str] = Form(default=[]),
 ):
     ctx = Contexto(tipo=TipoPessoa(tipo), documento=documento, nome=nome, uf=uf,
                    municipio=municipio, rg=rg, nome_mae=nome_mae, endereco=endereco,
                    data_nascimento=data_nascimento, estado_civil=estado_civil,
-                   orgao_expedidor=orgao_expedidor, nome_pai=nome_pai)
+                   orgao_expedidor=orgao_expedidor, nome_pai=nome_pai,
+                   papel=papel, id_suporte=id_suporte, operador=operador)
     job = criar_job(ctx, selecionados, municipal_url=municipal_url)
     asyncio.create_task(executar_job(job))
     return JSONResponse({"job_id": job.id})
@@ -85,7 +89,7 @@ async def upload(job_id: str, item: str = Form(...), arquivo: UploadFile = File(
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
     conteudo = await arquivo.read()
     ext = Path(arquivo.filename or "").suffix or ".pdf"
-    destino = job.ctx.pasta_saida / f"{_slug(item)}{ext}"
+    destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, _slug(item)) + ext)
     destino.write_bytes(conteudo)
     passo = next((p for p in job.passos if p.nome == item), None)
     if passo is None:
@@ -105,7 +109,7 @@ async def ler_processo(job_id: str, arquivo: UploadFile = File(...)):
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
     conteudo = await arquivo.read()
     base = _slug(Path(arquivo.filename or "processo").stem)
-    destino = job.ctx.pasta_saida / f"PROCESSO_{base}.pdf"
+    destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, f"PROCESSO_{base}") + ".pdf")
     destino.write_bytes(conteudo)
     resumo = analisar(str(destino), job.ctx)
     resumo["arquivo"] = arquivo.filename

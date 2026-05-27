@@ -1,6 +1,22 @@
 const form = document.getElementById("form");
-const tipoSel = document.getElementById("tipo");
+const papelSel = document.getElementById("papel");
+const tipoInput = document.getElementById("tipo");
+const mesmaPessoa = document.getElementById("mesmaPessoa");
 const checklistDiv = document.getElementById("checklist");
+
+function tipoAtual() {
+  return papelSel.value === "Franquia" ? "PJ" : "PF";
+}
+
+// Monta as opções de papel: se rep. legal e operador são a mesma pessoa, 2 opções; senão, 3.
+function popularPapeis() {
+  const atual = papelSel.value;
+  const ops = mesmaPessoa.checked
+    ? [["Franquia", "Franquia (CNPJ)"], ["Representante legal e Operador", "Representante legal e Operador (CPF)"]]
+    : [["Franquia", "Franquia (CNPJ)"], ["Representante legal", "Representante legal (CPF)"], ["Operador", "Operador (CPF)"]];
+  papelSel.innerHTML = ops.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  if (ops.some((o) => o[0] === atual)) papelSel.value = atual;
+}
 const estadoTag = document.getElementById("estado");
 const pastaP = document.getElementById("pasta");
 const outroBox = document.getElementById("outroBox");
@@ -17,7 +33,8 @@ const docLabel = document.getElementById("docLabel");
 
 // Alterna o rótulo do upload e os campos só de PF conforme o tipo escolhido
 function ajustarTipo() {
-  const pf = tipoSel.value === "PF";
+  const pf = tipoAtual() === "PF";
+  if (tipoInput) tipoInput.value = tipoAtual();
   if (docLabel) docLabel.textContent = pf ? "documento de identidade (RG/CNH)" : "Cartão CNPJ";
   // usa style.display (vence o display:flex do .linha; o atributo hidden não venceria)
   document.querySelectorAll(".pfonly").forEach((el) => (el.style.display = pf ? "" : "none"));
@@ -35,7 +52,7 @@ async function lerDocumento() {
   }
   lerStatus.textContent = "Lendo o documento e conferindo o CPF (várias leituras)… pode levar uns 15 segundos.";
   const fd = new FormData();
-  fd.append("tipo", tipoSel.value);
+  fd.append("tipo", tipoAtual());
   fd.append("arquivo", docFile.files[0]);
   let d;
   try {
@@ -141,13 +158,16 @@ async function carregarChecklist() {
   const uf = form.uf.value;
   const mun = form.municipio.value;
   const r = await fetch(
-    `/checklist?tipo=${tipoSel.value}&uf=${encodeURIComponent(uf)}&municipio=${encodeURIComponent(mun)}`
+    `/checklist?tipo=${tipoAtual()}&uf=${encodeURIComponent(uf)}&municipio=${encodeURIComponent(mun)}`
   );
   render(await r.json(), false);
 }
-tipoSel.addEventListener("change", carregarChecklist);
+papelSel.addEventListener("change", () => { ajustarTipo(); carregarChecklist(); });
+mesmaPessoa.addEventListener("change", () => { popularPapeis(); ajustarTipo(); carregarChecklist(); });
 form.uf.addEventListener("input", carregarChecklist);
 form.municipio.addEventListener("input", carregarChecklist);
+popularPapeis();
+ajustarTipo();
 carregarChecklist();
 
 // Acha o site da CND Municipal assim que você digita a cidade (com atraso)

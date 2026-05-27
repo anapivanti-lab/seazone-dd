@@ -17,19 +17,39 @@ def _slug(texto: str) -> str:
     return texto[:60] or "documento"
 
 
+_PREF_PAPEL = {"Franquia": "Franquia", "Representante legal": "Rep. legal", "Operador": "Operador",
+               "Representante legal e Operador": "Rep. legal e Operador"}
+
+
+def prefixo_papel(ctx) -> str:
+    """Prefixo do nome dos arquivos por papel — evita colisão quando PJ + 2 PFs
+    salvam na MESMA pasta da DD (ex.: 'Operador - CND Federal...pdf')."""
+    return _PREF_PAPEL.get(getattr(ctx, "papel", "") or "", "")
+
+
+def com_prefixo(ctx, base: str) -> str:
+    pref = prefixo_papel(ctx)
+    return f"{pref} - {base}" if pref else base
+
+
 def preparar_pasta(ctx: Contexto) -> Path:
-    rotulo = _slug(ctx.nome) if ctx.nome else ctx.documento
-    pasta = base_saida() / f"{rotulo}_{ctx.documento}"
+    """Pasta da DD no padrão do setor: '#<ID Suporte> - DD - <Operador>'.
+    PJ + representante legal + operador compartilham a MESMA pasta (mesmo ID)."""
+    operador = (ctx.operador or ctx.nome or ctx.documento).strip()
+    nome_pasta = f"#{ctx.id_suporte} - DD - {operador}" if ctx.id_suporte else f"DD - {operador}"
+    nome_pasta = re.sub(r'[\\/:*?"<>|]+', "", nome_pasta).strip()[:120] or ctx.documento
+    pasta = base_saida() / nome_pasta
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta
 
 
 def salvar_relatorio(job) -> Path:
     dados = job.to_dict()
-    (job.ctx.pasta_saida / "relatorio.json").write_text(
+    base = com_prefixo(job.ctx, "relatorio")
+    (job.ctx.pasta_saida / f"{base}.json").write_text(
         json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    destino = job.ctx.pasta_saida / "relatorio.html"
+    destino = job.ctx.pasta_saida / f"{base}.html"
     destino.write_text(_html(dados), encoding="utf-8")
     return destino
 
