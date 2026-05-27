@@ -8,8 +8,11 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
-echo Iniciando o sistema...
-echo A tela vai abrir no seu navegador em alguns segundos: http://127.0.0.1:8000
+REM Encerra qualquer versao ANTIGA ainda rodando na porta 8000 (evita codigo velho)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>nul
+
+echo Iniciando o sistema (versao mais recente)...
+echo A tela abre no navegador em alguns segundos: http://127.0.0.1:8000
 echo (Para encerrar, feche esta janela.)
 
 REM Abre o navegador depois de 3 segundos, dando tempo do servidor subir
