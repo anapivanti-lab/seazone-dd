@@ -1,10 +1,10 @@
 const form = document.getElementById("form");
 const tipoSel = document.getElementById("tipo");
-const certidoesDiv = document.getElementById("certidoes");
-const painel = document.getElementById("painel");
 const checklistDiv = document.getElementById("checklist");
 const estadoTag = document.getElementById("estado");
 const pastaP = document.getElementById("pasta");
+const outroBox = document.getElementById("outroBox");
+const acoes = document.getElementById("acoes");
 const btnConcluir = document.getElementById("concluir");
 const btnAbrirPasta = document.getElementById("abrirPasta");
 const btnOutro = document.getElementById("btnOutro");
@@ -14,10 +14,10 @@ const outroFile = document.getElementById("outroFile");
 const META = {
   sucesso: ["✅", "Emitida (auto)"],
   enviado: ["✅", "Enviado"],
-  manual: ["📤", "Falta enviar"],
+  manual: ["📤", "Envio manual"],
   aberta: ["📂", "Aberta — conclua no site"],
   pendente: ["⏳", "Pendente"],
-  aguardando: ["•", "Na fila"],
+  aguardando: ["🌐", "Abre automático"],
   executando: ["🔄", "Abrindo…"],
   erro: ["❌", "Erro"],
 };
@@ -25,32 +25,52 @@ const META = {
 let jobAtual = null;
 let ultimoRender = "";
 
-// Caixinhas das certidões com automação (quais sites abrir)
-async function carregarProvedores() {
-  certidoesDiv.innerHTML = "carregando…";
-  const r = await fetch("/provedores?tipo=" + tipoSel.value);
-  const nomes = await r.json();
-  certidoesDiv.innerHTML = nomes
-    .map(
-      (n) =>
-        `<label class="chk"><input type="checkbox" name="selecionados" value="${n}" checked> ${n}</label>`
-    )
-    .join("");
+// Desenha a checklist. comJob=false => prévia (só mostra tudo); comJob=true => com status e upload.
+function render(itens, comJob) {
+  const grupos = {};
+  itens.forEach((p) => (grupos[p.grupo || "Outros"] ||= []).push(p));
+  let html = "";
+  for (const [grupo, its] of Object.entries(grupos)) {
+    html += `<h3>${grupo}</h3><table class="cl"><tbody>`;
+    for (const p of its) {
+      let ic, tx;
+      if (comJob) {
+        [ic, tx] = META[p.status] || ["•", p.status];
+      } else {
+        [ic, tx] = p.auto ? ["🌐", "Abre automático"] : ["📤", "Envio manual"];
+      }
+      const acao = comJob
+        ? `<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>${p.arquivo ? " 📄" : ""}`
+        : "";
+      const obs = comJob && p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : "";
+      html += `<tr><td class="st">${ic} ${tx}</td><td>${p.nome}${obs}</td><td class="ac">${acao}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  checklistDiv.innerHTML = html;
 }
-tipoSel.addEventListener("change", carregarProvedores);
-carregarProvedores();
+
+// Prévia da checklist completa, já na abertura da página
+async function carregarChecklist() {
+  const r = await fetch("/checklist?tipo=" + tipoSel.value);
+  render(await r.json(), false);
+}
+tipoSel.addEventListener("change", () => {
+  if (!jobAtual) carregarChecklist();
+});
+carregarChecklist();
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const resp = await fetch("/emitir", { method: "POST", body: new FormData(form) });
   const { job_id } = await resp.json();
   jobAtual = job_id;
-  painel.hidden = false;
+  outroBox.hidden = false;
+  acoes.hidden = false;
   ultimoRender = "";
   acompanhar();
 });
 
-// Envio de arquivo (genérico)
 async function enviar(item, file) {
   const fd = new FormData();
   fd.append("item", item);
@@ -59,12 +79,9 @@ async function enviar(item, file) {
   atualizar();
 }
 
-// Upload por item (clique no botão "Enviar PDF" de cada linha)
 checklistDiv.addEventListener("change", (e) => {
   const inp = e.target;
-  if (inp.matches('input[type="file"]') && inp.files[0]) {
-    enviar(inp.dataset.item, inp.files[0]);
-  }
+  if (inp.matches('input[type="file"]') && inp.files[0]) enviar(inp.dataset.item, inp.files[0]);
 });
 
 btnOutro.addEventListener("click", () => {
@@ -86,31 +103,6 @@ btnAbrirPasta.addEventListener("click", () => {
   if (jobAtual) fetch("/abrir-pasta/" + jobAtual, { method: "POST" });
 });
 
-function renderChecklist(job) {
-  const grupos = {};
-  job.passos.forEach((p) => {
-    (grupos[p.grupo || "Outros"] ||= []).push(p);
-  });
-  let html = "";
-  for (const [grupo, itens] of Object.entries(grupos)) {
-    html += `<h3>${grupo}</h3><table class="cl"><tbody>`;
-    for (const p of itens) {
-      const [ic, tx] = META[p.status] || ["•", p.status];
-      html += `<tr>
-        <td class="st">${ic} ${tx}</td>
-        <td>${p.nome}${p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : ""}</td>
-        <td class="ac">
-          <label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}
-            <input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden>
-          </label>
-          ${p.arquivo ? " 📄" : ""}
-        </td></tr>`;
-    }
-    html += `</tbody></table>`;
-  }
-  checklistDiv.innerHTML = html;
-}
-
 async function atualizar() {
   if (!jobAtual) return;
   const r = await fetch("/status/" + jobAtual);
@@ -119,10 +111,9 @@ async function atualizar() {
   estadoTag.textContent = job.estado.replace(/_/g, " ");
   pastaP.textContent = "Pasta: " + job.pasta;
   btnConcluir.hidden = job.estado !== "aguardando_voce";
-  // só re-renderiza se algo mudou (evita piscar)
   const assinatura = JSON.stringify(job.passos);
   if (assinatura !== ultimoRender) {
-    renderChecklist(job);
+    render(job.passos, true);
     ultimoRender = assinatura;
   }
   return job;

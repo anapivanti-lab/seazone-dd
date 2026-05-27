@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=3">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
   <header>
@@ -29,30 +29,21 @@
         <label class="cresce">CNPJ / CPF
           <input name="documento" id="documento" placeholder="Somente números" required>
         </label>
-        <label class="uf">UF
-          <input name="uf" placeholder="SC" maxlength="2">
-        </label>
-        <label class="cresce">Município
-          <input name="municipio" placeholder="Florianópolis">
-        </label>
+        <label class="uf">UF<input name="uf" placeholder="SC" maxlength="2"></label>
+        <label class="cresce">Município<input name="municipio" placeholder="Florianópolis"></label>
       </div>
-
-      <fieldset id="certidoes-box">
-        <legend>Sites para abrir automaticamente</legend>
-        <div id="certidoes" class="certidoes">carregando…</div>
-      </fieldset>
-
       <button type="submit">Iniciar</button>
     </form>
 
-    <section id="painel" hidden>
+    <section id="painel">
       <h2>Checklist da Due Diligence <span id="estado" class="tag"></span></h2>
-      <p class="dica">📂 As certidões com automação abriram em abas — <b>resolva o captcha</b> e
-        clique em emitir; o PDF é salvo sozinho. Os demais documentos você <b>envia o PDF</b> aqui.</p>
+      <p class="dica" id="dica">Esta é a lista completa de documentos da DD. Preencha o CNPJ e clique em
+        <b>Iniciar</b>: as certidões marcadas com 🌐 abrem sozinhas (você resolve o captcha e emite);
+        as demais (📤) você envia o PDF com o botão <b>Enviar PDF</b>.</p>
 
-      <div id="checklist"></div>
+      <div id="checklist">carregando…</div>
 
-      <fieldset class="outro">
+      <fieldset class="outro" id="outroBox" hidden>
         <legend>Adicionar outro documento</legend>
         <div class="linha">
           <input id="outroNome" class="cresce" placeholder="Nome do documento (ex.: Procuração)">
@@ -61,14 +52,14 @@
         </div>
       </fieldset>
 
-      <div class="acoes">
-        <button type="button" id="concluir" hidden>Concluir e gerar relatório</button>
+      <div class="acoes" id="acoes" hidden>
+        <button type="button" id="concluir">Concluir e gerar relatório</button>
         <button type="button" id="abrirPasta" class="secundario">Abrir pasta dos PDFs</button>
       </div>
       <p id="pasta" class="pasta"></p>
     </section>
   </main>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

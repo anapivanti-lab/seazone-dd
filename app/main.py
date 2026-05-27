@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .checklist import itens_para
 from .models import Contexto, TipoPessoa
 from .orchestrator import JOBS, Passo, concluir_job, criar_job, executar_job
 from .providers import provedores_para
@@ -33,6 +34,15 @@ async def provedores(tipo: str):
     """Certidões com automação (alimenta as caixinhas de 'abrir site')."""
     ctx = Contexto(tipo=TipoPessoa(tipo), documento="0")
     return JSONResponse([p.nome for p in provedores_para(ctx)])
+
+
+@app.get("/checklist")
+async def checklist(tipo: str):
+    """Lista COMPLETA de documentos da DD (para mostrar tudo já na abertura)."""
+    ctx = Contexto(tipo=TipoPessoa(tipo), documento="0")
+    return JSONResponse(
+        [{"nome": it.nome, "grupo": it.grupo, "auto": it.provider is not None} for it in itens_para(ctx)]
+    )
 
 
 @app.post("/emitir")
