@@ -9,6 +9,7 @@ const btnConcluir = document.getElementById("concluir");
 const btnAbrirPasta = document.getElementById("abrirPasta");
 const btnParecer = document.getElementById("parecer");
 const parecerBox = document.getElementById("parecerBox");
+const cnpjBox = document.getElementById("cnpjBox");
 const btnOutro = document.getElementById("btnOutro");
 const outroNome = document.getElementById("outroNome");
 const outroFile = document.getElementById("outroFile");
@@ -184,6 +185,21 @@ function renderParecer(d) {
     <p class="obs">Documento <b>parecer.html</b> salvo na pasta da franquia. Revise antes de concluir.</p>`;
 }
 
+function renderCnpj(d) {
+  if (!d || !d.razao_social) {
+    cnpjBox.innerHTML = "";
+    return;
+  }
+  const irregular = d.situacao && d.situacao !== "ATIVA";
+  const socios = (d.socios || []).join(", ") || "—";
+  cnpjBox.innerHTML = `<div class="cnpj${irregular ? " alerta" : ""}">
+    <b>${d.razao_social}</b>${d.nome_fantasia ? " (" + d.nome_fantasia + ")" : ""}<br>
+    <span class="obs">Situação:</span> <b style="color:${irregular ? "#c0392b" : "#1a7d3c"}">${d.situacao || "—"}</b>
+    · <span class="obs">CNAE:</span> ${d.cnae_codigo || "—"} ${d.cnae_descricao || ""}<br>
+    <span class="obs">Sócios:</span> ${socios}
+  </div>`;
+}
+
 async function atualizar() {
   if (!jobAtual) return;
   const r = await fetch("/status/" + jobAtual);
@@ -198,6 +214,7 @@ async function atualizar() {
     ultimoRender = assinatura;
   }
   renderProcessos(job.processos);
+  renderCnpj(job.cnpj_dados);
   return job;
 }
 

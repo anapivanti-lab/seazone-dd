@@ -72,3 +72,5 @@ table.cl .ac { white-space: nowrap; width: 1%; text-align: right; }
 .outro .linha { align-items: center; margin: .3rem 0; }
 .proc { background: #f8fafb; border: 1px solid #e3e6ea; border-radius: 6px; padding: .6rem .8rem; margin: .5rem 0; font-size: .85rem; }
 .proc.alerta { border-left: 4px solid #c0392b; background: #fdf3f2; }
+.cnpj { background: #eef6ff; border: 1px solid #cfe0f0; border-radius: 6px; padding: .6rem .8rem; margin: .5rem 0 1rem; font-size: .85rem; }
+.cnpj.alerta { border-left: 4px solid #c0392b; background: #fdf3f2; }

@@ -41,6 +41,12 @@ def gerar(job) -> dict:
         if p.arquivo:
             certidoes.append({"nome": p.nome, "grupo": p.grupo, "classe": _classificar(p.arquivo)})
 
+    dados = getattr(job, "cnpj_dados", {}) or {}
+    cnae = dados.get("cnae_codigo", "")
+    cnae_desc = dados.get("cnae_descricao", "")
+    situacao = dados.get("situacao", "")
+    socios = dados.get("socios", [])
+
     positivas = [c for c in certidoes if c["classe"] == "positiva"]
     indet = [c for c in certidoes if c["classe"] == "indeterminado"]
     crim = [pr for pr in job.processos if pr.get("criminal")]
@@ -61,8 +67,11 @@ def gerar(job) -> dict:
     # 2 — criminal?
     crits.append(("alerta", f"{len(crim)} processo(s) criminal(is) detectado(s).") if crim
                  else ("ok", "Nenhum processo criminal nos PDFs lidos."))
-    # 3 — CNAE
-    crits.append(("revisar", "Confirme o CNAE no Cartão CNPJ coletado."))
+    # 3 — CNAE (preenchido automaticamente pela BrasilAPI)
+    if cnae:
+        crits.append(("revisar", f"CNAE {cnae} — {cnae_desc}. Confirme se condiz com a atividade da franquia."))
+    else:
+        crits.append(("revisar", "CNAE não obtido automaticamente — confira no Cartão CNPJ."))
     # 4 — PEP
     crits.append(("revisar", "Confirme se o representante é PEP (verificação manual)."))
     # 5 — protestos
@@ -76,22 +85,24 @@ def gerar(job) -> dict:
     crits.append(("alerta", f"{len(civel) + len(fraude)} processo(s) cível(is)/fraude detectado(s).")
                  if (civel or fraude) else ("ok", "Nenhum processo cível relevante nos PDFs lidos."))
 
-    if crim or fraude or positivas:
+    situacao_irregular = situacao and situacao != "ATIVA"
+    if crim or fraude or positivas or situacao_irregular:
         risco = "ALTO"
     elif any(c[0] == "alerta" for c in crits):
         risco = "MÉDIO"
     else:
         risco = "BAIXO (sem alertas automáticos — revise e conclua)"
 
-    dados = {
+    resultado = {
         "tipo": ctx.tipo.value, "documento": ctx.documento, "nome": ctx.nome,
         "uf": ctx.uf, "municipio": ctx.municipio, "risco": risco,
+        "situacao": situacao, "cnae": cnae, "cnae_desc": cnae_desc, "socios": socios,
         "criterios": [{"texto": CRITERIOS[i], "status": crits[i][0], "obs": crits[i][1]} for i in range(6)],
         "certidoes": certidoes, "processos": job.processos,
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
     }
-    _salvar_html(job, dados)
-    return dados
+    _salvar_html(job, resultado)
+    return resultado
 
 
 _COR = {"ok": ("✅", "#1a7d3c"), "alerta": ("⚠️", "#c0392b"), "revisar": ("🔎", "#b8860b")}
@@ -115,6 +126,8 @@ table{{border-collapse:collapse;width:100%;margin:1rem 0}}td,th{{border:1px soli
 th{{background:#f5f5f5}}.risco{{font-size:1.3rem;font-weight:700;color:{cor_risco}}}</style></head><body>
 <h1>Parecer de Risco — Due Diligence</h1>
 <p><b>{d['tipo']}</b> — {d['nome'] or '(sem nome)'} — {d['documento']} — {d['municipio']}/{d['uf']}<br>
+Situação cadastral: <b>{d.get('situacao') or '—'}</b> · CNAE: {d.get('cnae') or '—'} {d.get('cnae_desc') or ''}<br>
+Sócios: {', '.join(d.get('socios') or []) or '—'}<br>
 Gerado em {d['gerado_em']}</p>
 <p>Classificação de risco: <span class="risco">{d['risco']}</span></p>
 <h2>Critérios</h2>

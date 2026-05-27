@@ -13,6 +13,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 from .checklist import itens_para
+from .cnpj_dados import consultar as consultar_cnpj
 from .config import CERT_ORIGINS, CERT_PFX, CERT_SENHA, PASTA_PERFIL
 from .models import Contexto
 from .providers.base import provedor_por_nome
@@ -39,6 +40,7 @@ class Job:
     selecionados: list[str] = field(default_factory=list)
     passos: list[Passo] = field(default_factory=list)
     processos: list = field(default_factory=list)  # resumos de processos lidos
+    cnpj_dados: dict = field(default_factory=dict)  # dados da BrasilAPI (CNAE, situação, sócios)
     estado: str = "criado"  # criado | executando | aguardando_voce | concluido
     criado_em: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     _pw: object = field(default=None, repr=False, compare=False)
@@ -56,6 +58,7 @@ class Job:
                 for p in self.passos
             ],
             "processos": self.processos,
+            "cnpj_dados": self.cnpj_dados,
         }
 
 
@@ -64,6 +67,9 @@ JOBS: dict[str, Job] = {}
 
 def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
     selecionados = selecionados or []
+    dados = consultar_cnpj(ctx.documento)  # dados grátis do CNPJ (CNAE, situação, sócios)
+    if dados and not ctx.nome and dados.get("razao_social"):
+        ctx.nome = dados["razao_social"]
     ctx.pasta_saida = preparar_pasta(ctx)
     passos = []
     for it in itens_para(ctx):
@@ -76,6 +82,7 @@ def criar_job(ctx: Contexto, selecionados: list[str] | None = None) -> Job:
         passos.append(Passo(nome=it.nome, grupo=it.grupo, modo=it.modo, url=it.url,
                             provider=it.provider, status=status, mensagem=msg))
     job = Job(id=uuid.uuid4().hex[:8], ctx=ctx, selecionados=selecionados, passos=passos)
+    job.cnpj_dados = dados or {}
     JOBS[job.id] = job
     return job
 
