@@ -98,6 +98,7 @@ const MODO = {
 
 let jobAtual = null;
 let ultimoRender = "";
+let ultimoProc = "";
 
 // Desenha a checklist. comJob=false => prévia (só mostra tudo); comJob=true => com status e upload.
 function render(itens, comJob) {
@@ -263,8 +264,12 @@ function renderProcessos(lista) {
       const detalhes = p.fatos || andamentos
         ? `<details><summary>Ver fatos e andamentos</summary>${p.fatos ? `<p class="obs"><b>Fatos:</b> ${p.fatos}</p>` : ""}${andamentos ? `<b>Andamentos (mais recentes):</b><ul>${andamentos}</ul>` : ""}</details>`
         : "";
+      const resumo = p.resumo
+        ? `<div style="background:#f0f6fa;border-left:3px solid #0b4f6c;padding:.5rem .7rem;margin:.5rem 0;border-radius:4px;text-align:justify"><b>📋 Resumo do processo:</b> ${p.resumo}</div>`
+        : "";
       return `<div class="proc${p.criminal || p.fraude ? " alerta" : ""}">
         <b>${p.classe || "Processo"}</b> — nº ${p.numero}
+        ${resumo}
         ${linha("Objeto", p.assunto)}
         ${linha("Papel na DD", p.papel_dd)}
         ${linha("Partes", partes)}
@@ -335,7 +340,11 @@ async function atualizar() {
     render(job.passos, true);
     ultimoRender = assinatura;
   }
-  renderProcessos(job.processos);
+  const sigProc = JSON.stringify(job.processos);
+  if (sigProc !== ultimoProc) {   // só re-desenha quando muda (senão o "Ver detalhes" fechava sozinho)
+    renderProcessos(job.processos);
+    ultimoProc = sigProc;
+  }
   renderCnpj(job.cnpj_dados);
   return job;
 }

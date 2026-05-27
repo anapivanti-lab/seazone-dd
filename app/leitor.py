@@ -119,13 +119,68 @@ def _papel_dd(low, ctx, partes):
 
 
 def _fatos(texto):
-    """Trecho narrativo (denúncia / petição inicial) — o que aconteceu."""
-    for marco in ("DOS FATOS", "DENÚNCIA", "DENUNCIA", "Narra ", "Consta dos autos", "Trata-se"):
-        i = texto.find(marco)
-        if i != -1:
-            t = re.sub(r"\s+", " ", texto[i:i + 1100]).strip()
-            return t[:900] + ("…" if len(t) > 900 else "")
-    return ""
+    """Narrativa dos FATOS (o que aconteceu), pulando a qualificação das partes e
+    limpando cabeçalhos de página repetidos do PDF."""
+    linhas = texto.splitlines()
+    ini = -1
+    for idx, l in enumerate(linhas):
+        if re.search(r"(ato delituoso|fato delituoso|seguinte[s]? fato|seguinte ato|"
+                     r"Consta d[oa]|Narra |No dia|Segundo apurad|DOS FATOS|imputa-se)", l, re.I):
+            ini = idx
+            break
+    if ini == -1:
+        return ""
+    out = []
+    for l in linhas[ini:ini + 80]:
+        s = l.strip()
+        if not s:
+            continue
+        if re.match(r"(\d*\s*PROMOTORIA|Endere[çc]o:|Telefone:|E-?mail|Processo \d|P[áa]gina|"
+                    r"EXCELENT|SIG n|\d+ª? ?PROMOTORIA)", s, re.I):
+            continue
+        if re.match(r"^[\d.\-/]+(SC)?$", s) or re.match(r"^\d{2}/\d{2}/\d{4}", s):
+            continue
+        # corta no início do pedido/capitulação (fim dos fatos)
+        if re.match(r"(Diante do exposto|Ante o exposto|Isso posto|Pelo exposto|Requer|"
+                    r"Assim agindo|Incurso|Incursos|denunci[ao] est[áa]|Posto isso)", s, re.I):
+            break
+        out.append(s)
+        if len(" ".join(out)) > 1500:
+            break
+    txt = re.sub(r"\s+", " ", " ".join(out)).strip(" :,-")
+    m = re.match(r".{0,80}?delituoso:\s*", txt, re.I)  # remove o lead-in "...ato delituoso:"
+    if m:
+        txt = txt[m.end():]
+    return (txt[:1400] + "…") if len(txt) > 1400 else txt.strip()
+
+
+def _resumo(d):
+    """Parágrafo redigido com o panorama do processo (o que é, partes, papel, fase)."""
+    partes = d.get("partes", [])
+    mp = [p for p in partes if "MINIST" in p["nome"].upper() or p["tipo"] == "Entidade"]
+    if mp:
+        autor = mp[0]["nome"]
+        reus = ", ".join(p["nome"] for p in partes if p not in mp) or "—"
+    else:
+        autor = partes[0]["nome"] if partes else "—"
+        reus = ", ".join(p["nome"] for p in partes[1:]) if len(partes) > 1 else "—"
+    classe = d.get("classe") or "processo"
+    t = f"Trata-se de {classe.lower()}"
+    if d.get("assunto"):
+        t += f", cujo objeto é {d['assunto'].lower()}"
+    t += f". Figuram como autor(es): {autor}; e como réu(s)/parte(s) contrária(s): {reus}. "
+    if d.get("papel_dd"):
+        t += d["papel_dd"].rstrip(".") + ". "
+    if d.get("situacao"):
+        t += f"Situação atual: {d['situacao']}. "
+    if d.get("sentenca"):
+        t += f"Desfecho: {d['sentenca']['resultado']}. "
+    if d.get("fatos"):
+        frases = re.split(r"(?<=[.;])\s+", d["fatos"])
+        sintese = " ".join(frases[:4]).strip()
+        if sintese:
+            t += "Em síntese dos fatos: " + sintese
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def _andamentos(texto):
@@ -207,4 +262,5 @@ def analisar(caminho: str, ctx=None) -> dict:
         "fraude": "Fraude" in riscos,
         "tem_texto": bool(plano),
     }
+    d["resumo"] = _resumo(d)
     return d
