@@ -146,6 +146,22 @@ async def abrir_pasta(job_id: str):
     return JSONResponse({"ok": True})
 
 
+@app.post("/abrir-arquivo/{job_id}")
+async def abrir_arquivo(job_id: str, nome: str = Form(...)):
+    """Abre o PDF já capturado de um item específico (no visualizador padrão)."""
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    passo = next((p for p in job.passos if p.nome == nome and p.arquivo), None)
+    if not passo:
+        return JSONResponse({"erro": "esse item ainda não tem PDF salvo"}, status_code=404)
+    try:
+        os.startfile(passo.arquivo)
+    except Exception as e:
+        return JSONResponse({"erro": str(e)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
 @app.get("/status/{job_id}")
 async def status(job_id: str):
     job = JOBS.get(job_id)

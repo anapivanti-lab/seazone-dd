@@ -134,7 +134,9 @@ def _ligar_captura(page, prov, passo, ctx):
             arq = await salvar_download(download, ctx, prov.nome_arquivo)
             passo.status = "sucesso"
             passo.arquivo = str(arq)
-            passo.mensagem = "PDF salvo automaticamente."
+            passo.mensagem = (f"✅ PDF salvo na PASTA da franquia: {Path(arq).name} "
+                              "— use o botão 'Abrir PDF' aqui do lado. (O arquivo que cai no "
+                              "Downloads com nome estranho é lixo do Chrome; pode ignorar.)")
         except Exception as e:
             passo.mensagem = f"Baixou, mas falhou ao salvar: {e}"
 

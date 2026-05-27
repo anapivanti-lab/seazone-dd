@@ -77,7 +77,7 @@ function render(itens, comJob) {
         [ic, tx] = MODO[p.modo] || MODO.manual;
       }
       const acao = comJob
-        ? `<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>${p.arquivo ? " 📄" : ""}`
+        ? `${p.arquivo ? `<button type="button" class="upbtn abrir" data-abrir="${p.nome}">📄 Abrir PDF</button> ` : ""}<label class="upbtn">${p.arquivo ? "Trocar PDF" : "Enviar PDF"}<input type="file" data-item="${p.nome}" accept="application/pdf,image/*" hidden></label>`
         : "";
       const obs = comJob
         ? (p.mensagem ? `<br><span class="obs">${p.mensagem}</span>` : "")
@@ -127,6 +127,16 @@ async function enviar(item, file) {
 checklistDiv.addEventListener("change", (e) => {
   const inp = e.target;
   if (inp.matches('input[type="file"]') && inp.files[0]) enviar(inp.dataset.item, inp.files[0]);
+});
+
+// Abrir o PDF já capturado de um item
+checklistDiv.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-abrir]");
+  if (b && jobAtual) {
+    const fd = new FormData();
+    fd.append("nome", b.dataset.abrir);
+    fetch("/abrir-arquivo/" + jobAtual, { method: "POST", body: fd });
+  }
 });
 
 btnOutro.addEventListener("click", () => {
