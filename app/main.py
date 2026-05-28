@@ -123,8 +123,13 @@ async def parecer(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
-    d = gerar_parecer(job)
-    await render_relatorio_pdf(job.ctx.pasta_saida, d.get("relatorio_html", ""))
+    # IA/OCR são pesados e bloqueantes — rodam numa thread para NÃO congelar o servidor
+    d = await asyncio.to_thread(gerar_parecer, job)
+    try:
+        await asyncio.wait_for(render_relatorio_pdf(job.ctx.pasta_saida, d.get("relatorio_html", "")), timeout=60)
+    except Exception:
+        pass
+    d.pop("relatorio_html", None)
     return JSONResponse(d)
 
 

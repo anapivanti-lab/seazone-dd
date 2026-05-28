@@ -24,11 +24,11 @@ def disponivel() -> bool:
         return False
 
 
-def _gerar(prompt: str, timeout: int = 180) -> str:
+def _gerar(prompt: str, timeout: int = 150) -> str:
     try:
         r = httpx.post(f"{_BASE}/api/generate", json={
             "model": MODELO_IA, "prompt": prompt, "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 350},
+            "options": {"temperature": 0.1, "num_predict": 300},
         }, timeout=timeout)
         if r.status_code == 200:
             return (r.json().get("response") or "").strip()

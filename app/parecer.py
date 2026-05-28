@@ -478,10 +478,8 @@ def _salvar_docx(pasta: Path, d) -> Path:
         label(e["papel"] + ":", e["qualificacao"])
 
     secao("2. Documentos analisados")
-    p = doc.add_paragraph()
-    p.add_run("As certidões e documentos analisados (com os links) constam no ")
-    _hyperlink(p, ARQ_RELATORIO, "Relatório da DD")
-    p.add_run(".")
+    doc.add_paragraph(f"As certidões e documentos analisados constam no Relatório da DD "
+                      f"(arquivo “{ARQ_RELATORIO}”), salvo na mesma pasta desta Due Diligence.")
 
     secao("3. Parecer")
     for e in d["entidades"]:
@@ -507,11 +505,8 @@ def _salvar_docx(pasta: Path, d) -> Path:
         doc.add_paragraph(d["concl_texto"])
 
     doc.add_paragraph()
-    dt = doc.add_paragraph()
-    dt.add_run(d["data_extenso"])
-    rel = doc.add_paragraph()
-    rel.add_run("Relatório completo da DD (checklist e links das certidões): ")
-    _hyperlink(rel, ARQ_RELATORIO, "abrir Relatório")
+    doc.add_paragraph(d["data_extenso"])
+    doc.add_paragraph(f"Relatório completo da DD (checklist e certidões): arquivo “{ARQ_RELATORIO}”, na mesma pasta.")
 
     destino = pasta / ARQ_PARECER
     doc.save(str(destino))
@@ -562,11 +557,11 @@ def _corpo_html(d) -> str:
     </div>
     <h2>1. Qualificação</h2>{quals}
     <h2>2. Documentos analisados</h2>
-    <p>As certidões e documentos analisados (com os links) constam no <a href="{ARQ_RELATORIO}">Relatório da DD</a>.</p>
+    <p>As certidões e documentos analisados constam no <b>Relatório da DD</b> (arquivo “{ARQ_RELATORIO}”), na mesma pasta.</p>
     <h2>3. Parecer</h2>{blocos}
     <h2>4. Conclusão</h2>{concl}
     <p class="fim">{d['data_extenso']}</p>
-    <p class="fim"><a href="{ARQ_RELATORIO}">Abrir o Relatório completo da DD ↗</a></p>
+    <p class="fim">Relatório completo da DD: <b>{ARQ_RELATORIO}</b> (na mesma pasta).</p>
     """
 
 
