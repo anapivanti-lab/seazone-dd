@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -17,6 +17,7 @@ from .extrator import extrair_cartao_cnpj, extrair_identidade
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .ocr import ler as ler_identidade
+from . import controle
 from .parecer import gerar as gerar_parecer, render_relatorio_pdf
 from .orchestrator import JOBS, Passo, abrir_item, concluir_job, criar_job, executar_job
 from .providers import provedores_para
@@ -33,6 +34,19 @@ async def home(request: Request):
     resp = templates.TemplateResponse(request, "index.html")
     resp.headers["Cache-Control"] = "no-store, must-revalidate"  # sempre versão atual
     return resp
+
+
+@app.get("/controle", response_class=HTMLResponse)
+async def controle_view():
+    """Tela de Controle das DDs (integrada ao sistema): lista todas as DDs feitas."""
+    return controle.pagina_html()
+
+
+@app.get("/controle.xlsx")
+async def controle_export():
+    """Exporta o controle para Excel sob demanda."""
+    return FileResponse(controle.exportar_xlsx(), filename="Controle de Due Diligence.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/provedores")

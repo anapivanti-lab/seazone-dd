@@ -14,7 +14,22 @@ header {
   background: var(--escuro);
   color: #fff;
   padding: 1.2rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
 }
+.link-controle {
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  text-decoration: none;
+  padding: .55rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: .9rem;
+  white-space: nowrap;
+}
+.link-controle:hover { background: rgba(255, 255, 255, .22); }
 header h1 { margin: 0; font-size: 1.4rem; }
 header .sub { margin: .2rem 0 0; opacity: .8; font-size: .9rem; }
 main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
