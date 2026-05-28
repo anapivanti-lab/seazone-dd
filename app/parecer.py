@@ -238,7 +238,7 @@ def _analisar_entidade(job) -> dict:
         "papel": papel, "ordem": _ORDEM.get(papel, 3), "tipo": ctx.tipo.value,
         "nome": ctx.nome, "qualificacao": qual,
         "certidoes_txt": t_cert, "processos_txt": t_proc, "protestos_txt": t_prot, "pendencias_txt": t_pend,
-        "documento": ctx.documento,
+        "documento": ctx.documento, "municipio": ctx.municipio, "uf": ctx.uf,
         "cnae": dados.get("cnae_codigo", ""), "cnae_desc": dados.get("cnae_descricao", ""),
         "itens": [{"nome": p.nome, "grupo": p.grupo, "status": p.status,
                    "arquivo": (Path(p.arquivo).name if p.arquivo else "")} for p in job.passos],
@@ -378,6 +378,11 @@ def gerar(job) -> dict:
     d["relatorio_html"] = _relatorio_html(d, _criterios(entidades))
     d["html"] = _pagina_html(d)
     d["arquivo"] = str(_salvar_docx(pasta, d))
+    try:  # planilha de controle (1 linha por DD, atualizável e editável no Excel)
+        from . import controle
+        controle.registrar(d, d.get("url_pasta", ""))
+    except Exception:
+        pass
     return d
 
 
