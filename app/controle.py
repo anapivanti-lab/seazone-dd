@@ -5,6 +5,7 @@ exportação para Excel sob demanda (botão), mas o controle vive no próprio si
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 from datetime import datetime
@@ -111,24 +112,37 @@ def importar_planilha(caminho: str) -> int:
 
 # ---------------------------------------------------------------- página /controle
 _ESTILO = """
-body{font-family:'Segoe UI',Arial,sans-serif;color:#1a2332;margin:0;background:#f4f6f8}
-header{background:#1a2b3c;color:#fff;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
-header h1{margin:0;font-size:1.2rem}header a{color:#9fd0e8;font-size:.9rem;text-decoration:none}
-main{max-width:1200px;margin:1.4rem auto;padding:0 1rem}
-.resumo{display:flex;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap}
-.pill{background:#fff;border-radius:10px;padding:.5rem .9rem;box-shadow:0 1px 4px rgba(0,0,0,.07);font-size:.9rem}
-.pill b{font-size:1.1rem}
-table{border-collapse:collapse;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-th,td{border:1px solid #e3e6ea;padding:.5rem .6rem;text-align:left;font-size:.85rem;vertical-align:top}
-th{background:#0b4f6c;color:#fff;position:sticky;top:0}
-tr:nth-child(even){background:#fafbfc}
-.risco{font-weight:700;text-align:center;white-space:nowrap;border-radius:6px}
-td a{color:#0b6;font-weight:600;text-decoration:none}
-.obs{max-width:420px}
-.busca{padding:.5rem .7rem;border:1px solid #ccc;border-radius:8px;font-size:.95rem;width:280px;margin-bottom:.8rem}
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;color:#1a2332;margin:0;background:#eef1f4}
+header{background:#1a2b3c;color:#fff;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+header h1{margin:0;font-size:1.2rem}
+header a{color:#9fd0e8;text-decoration:none;font-size:.9rem}
 .btn{background:#1a7d3c;color:#fff;padding:.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.85rem}
-.vazio{background:#fff;padding:2rem;text-align:center;border-radius:10px;color:#777}
+main{max-width:1320px;margin:1.3rem auto;padding:0 1rem}
+.resumo{display:flex;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap}
+.pill{background:#fff;border-radius:10px;padding:.5rem 1rem;box-shadow:0 1px 4px rgba(0,0,0,.07);font-size:.8rem;color:#5a6b7a;text-align:center}
+.pill b{font-size:1.25rem;display:block;color:#1a2332}
+.busca{padding:.6rem .9rem;border:1px solid #ccd5dd;border-radius:9px;font-size:.95rem;width:340px;max-width:100%;margin-bottom:.9rem}
+.tabela{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.08);overflow:hidden}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{padding:.55rem .7rem;text-align:left;font-size:.82rem;vertical-align:top;border-bottom:1px solid #eef1f4;overflow:hidden}
+th{background:#0b4f6c;color:#fff;font-weight:600}
+tr:hover td{background:#f6f9fb}
+.fr{font-weight:600}
+.muted{color:#8a97a3;font-size:.78rem}
+.doc{font-variant-numeric:tabular-nums;white-space:nowrap}
+.risco{display:inline-block;font-weight:700;text-align:center;border-radius:999px;padding:.12rem .6rem;font-size:.74rem}
+td a{color:#0b6;font-weight:600;text-decoration:none;white-space:nowrap}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.obs .txt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.obs .txt.aberto{-webkit-line-clamp:unset}
+.vazio{background:#fff;padding:2rem;text-align:center;border-radius:12px;color:#777}
 """
+
+_COLGROUP = ("<colgroup>"
+             '<col style="width:50px"><col style="width:15%"><col style="width:128px"><col style="width:14%">'
+             '<col style="width:110px"><col style="width:100px"><col style="width:84px"><col style="width:62px">'
+             '<col><col style="width:78px"></colgroup>')
 
 
 def pagina_html() -> str:
@@ -136,40 +150,52 @@ def pagina_html() -> str:
     n = len(regs)
     por_risco = {}
     for r in regs:
-        por_risco[r.get("risco", "—")] = por_risco.get(r.get("risco", "—"), 0) + 1
-    pills = f'<div class="pill">Total de DDs <b>{n}</b></div>'
+        rr = (r.get("risco") or "").upper()
+        if rr in ("ALTO", "MÉDIO", "BAIXO"):
+            por_risco[rr] = por_risco.get(rr, 0) + 1
+    pills = f'<div class="pill">Total<b>{n}</b></div>'
     for risco in ("ALTO", "MÉDIO", "BAIXO"):
         if por_risco.get(risco):
-            cor = _COR.get(risco, ("#333", "#eee"))[0]
-            pills += f'<div class="pill" style="color:{cor}">{risco} <b>{por_risco[risco]}</b></div>'
+            cf, cb = _COR[risco]
+            pills += f'<div class="pill" style="background:{cb};color:{cf}">{risco.title()}<b>{por_risco[risco]}</b></div>'
 
     if not regs:
         corpo = '<div class="vazio">Nenhuma DD registrada ainda. Gere um parecer e a DD aparece aqui.</div>'
     else:
+        e = html.escape
         linhas = ""
         for r in reversed(regs):  # mais recentes primeiro
-            risco = (r.get("risco") or "").upper()
-            cf, cb = _COR.get(risco, ("#333", "#eee"))
-            link = f'<a href="{r["link"]}" target="_blank">abrir pasta ↗</a>' if r.get("link") else "—"
+            risco = (r.get("risco") or "").strip()
+            cf, cb = _COR.get(risco.upper(), ("#5a6b7a", "#eef1f4"))
+            badge = (f'<span class="risco" style="color:{cf};background:{cb}">{e(risco)}</span>'
+                     if risco else '<span class="muted">—</span>')
+            link = f'<a href="{e(r["link"])}" target="_blank">abrir ↗</a>' if r.get("link") else "—"
+            obs = e(r.get("obs", ""))
             linhas += (
-                f'<tr><td>{r.get("id", "")}</td><td><b>{r.get("franquia", "")}</b></td>'
-                f'<td>{r.get("cnpj", "")}</td><td>{r.get("representante", "")}</td><td>{r.get("cpf", "")}</td>'
-                f'<td>{r.get("cidade_uf", "")}</td>'
-                f'<td class="risco" style="color:{cf};background:{cb}">{r.get("risco", "")}</td>'
-                f'<td>{link}</td><td class="obs">{r.get("obs", "")}</td><td>{r.get("data", "")}</td></tr>')
+                f'<tr><td class="muted">{e(r.get("id", ""))}</td>'
+                f'<td><div class="fr clamp2" title="{e(r.get("franquia", ""))}">{e(r.get("franquia", ""))}</div></td>'
+                f'<td class="doc">{e(r.get("cnpj", ""))}</td>'
+                f'<td><div class="clamp2">{e(r.get("representante", ""))}</div></td>'
+                f'<td class="doc">{e(r.get("cpf", ""))}</td>'
+                f'<td>{e(r.get("cidade_uf", ""))}</td>'
+                f'<td>{badge}</td><td>{link}</td>'
+                f'<td class="obs"><div class="txt" title="{obs}" onclick="this.classList.toggle(\'aberto\')">{obs}</div></td>'
+                f'<td class="muted">{e(r.get("data", ""))}</td></tr>')
         corpo = (
-            '<input class="busca" id="q" placeholder="🔎 Filtrar (nome, CNPJ, cidade, risco...)" onkeyup="filtra()">'
-            '<table id="tab"><thead><tr><th>ID</th><th>Franquia</th><th>CNPJ</th><th>Representante/Operador</th>'
+            '<input class="busca" id="q" placeholder="🔎 Filtrar por nome, CNPJ, cidade, risco…" onkeyup="filtra()">'
+            f'<div class="tabela"><table id="tab">{_COLGROUP}'
+            '<thead><tr><th>ID</th><th>Franquia</th><th>CNPJ</th><th>Representante / Operador</th>'
             '<th>CPF</th><th>Cidade/UF</th><th>Risco</th><th>Pasta</th><th>Observações</th><th>Data</th></tr></thead>'
-            f'<tbody>{linhas}</tbody></table>'
+            f'<tbody>{linhas}</tbody></table></div>'
             '<script>function filtra(){var q=document.getElementById("q").value.toLowerCase();'
             'document.querySelectorAll("#tab tbody tr").forEach(function(tr){'
-            'tr.style.display = tr.innerText.toLowerCase().includes(q) ? "" : "none";});}</script>')
+            'tr.style.display=tr.innerText.toLowerCase().includes(q)?"":"none";});}</script>')
 
     return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>Controle de Due Diligences</title><style>{_ESTILO}</style></head><body>'
             f'<header><h1>📊 Controle de Due Diligences</h1>'
-            f'<span><a href="/">← Voltar ao sistema</a> &nbsp; '
+            f'<span><a href="/">← Voltar ao sistema</a> &nbsp;&nbsp; '
             f'<a href="/controle.xlsx" class="btn">⬇️ Exportar Excel</a></span></header>'
             f'<main><div class="resumo">{pills}</div>{corpo}</main></body></html>')
 
