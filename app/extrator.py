@@ -97,9 +97,60 @@ def _texto_documento(caminho: str, ocr: bool = False, passes=PASSES_DOC) -> str:
     return _texto_de_pdf(caminho, ocr=ocr, passes=passes)
 
 
+def _juntar_letras_espacadas(linha: str) -> str:
+    """O PDF do Cartão CNPJ da Receita vem com cada letra separada por 1 espaço e
+    palavras separadas por 2+ espaços. Ex.: 'M A D U R E I R A' -> 'MADUREIRA',
+    'R  M A R I A' -> 'R MARIA'. Em linhas que já vêm normais (ex.: 'NOME
+    EMPRESARIAL'), não altera nada."""
+    blocos = re.split(r" {2,}", linha.strip())
+    saida = []
+    for b in blocos:
+        toks = b.split(" ")
+        if len(toks) > 1 and all(len(t) == 1 for t in toks):
+            saida.append("".join(toks))
+        else:
+            saida.append(b)
+    return " ".join(saida).strip()
+
+
+def _ler_cartao_do_pdf(texto: str) -> dict:
+    """Fallback quando a BrasilAPI não tem o CNPJ (típico de empresa recém-aberta):
+    lê razão social, logradouro, número, bairro, município, UF e CEP direto do
+    texto do Cartão CNPJ da Receita."""
+    linhas = [_juntar_letras_espacadas(l) for l in texto.splitlines() if l.strip()]
+
+    def proximo_valor(*rotulos: str) -> str:
+        rx = re.compile("|".join(rotulos), re.I)
+        for i, l in enumerate(linhas):
+            if rx.fullmatch(l):
+                for prox in linhas[i + 1:i + 3]:
+                    v = prox.strip(" *").strip()
+                    if v and v != "*":
+                        return v
+                break
+        return ""
+
+    razao = proximo_valor(r"NOME\s+EMPRESARIAL")
+    logradouro = proximo_valor(r"LOGRADOURO")
+    numero = proximo_valor(r"N.MERO")  # NÚMERO (do endereço; rótulo curto)
+    bairro = proximo_valor(r"BAIRRO[/\\]DISTRIT\s*O")
+    cep = proximo_valor(r"CEP")
+    municipio = proximo_valor(r"MUNIC.PIO")
+    uf = proximo_valor(r"UF")
+
+    endereco = ", ".join(filter(None, [
+        f"{logradouro} {numero}".strip() if (logradouro or numero) else "",
+        bairro,
+        f"{municipio}/{uf}".strip("/") if (municipio or uf) else "",
+        f"CEP {cep}" if cep else "",
+    ]))
+    return {"razao_social": razao, "uf": uf, "municipio": municipio, "endereco": endereco}
+
+
 def extrair_cartao_cnpj(caminho: str) -> dict:
     """Lê o Cartão CNPJ e devolve documento (CNPJ), razão social, endereço, UF e
-    município (via BrasilAPI a partir do número encontrado)."""
+    município. Tenta a BrasilAPI primeiro (mais limpo); se ela não tem o CNPJ
+    (empresa recém-aberta, fora do ar), lê os dados do próprio PDF do cartão."""
     texto = _texto_documento(caminho)
     m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", texto)
     if not m:  # não achou no texto -> tenta OCR da imagem (cartão escaneado/foto)
@@ -108,13 +159,22 @@ def extrair_cartao_cnpj(caminho: str) -> dict:
     cnpj = re.sub(r"\D", "", m.group(0)) if m else ""
     out = {"ok": bool(cnpj), "tipo": "PJ", "documento": cnpj,
            "nome": "", "uf": "", "municipio": "", "endereco": ""}
-    if cnpj:
-        dados = consultar_cnpj(cnpj)
-        if dados:
-            out.update(nome=dados.get("razao_social", ""), uf=dados.get("uf", ""),
-                       municipio=dados.get("municipio", ""), endereco=dados.get("endereco", ""))
-    else:
+    if not cnpj:
         out["erro"] = "Não consegui ler o CNPJ do cartão. Digite o CNPJ à mão."
+        return out
+
+    dados = consultar_cnpj(cnpj)
+    if dados:
+        out.update(nome=dados.get("razao_social", ""), uf=dados.get("uf", ""),
+                   municipio=dados.get("municipio", ""), endereco=dados.get("endereco", ""))
+
+    # Fallback: lê do próprio cartão o que a BrasilAPI não trouxe (CNPJ recém-aberto)
+    if not (out["nome"] and out["endereco"]):
+        do_pdf = _ler_cartao_do_pdf(texto)
+        out["nome"] = out["nome"] or do_pdf["razao_social"]
+        out["uf"] = out["uf"] or do_pdf["uf"]
+        out["municipio"] = out["municipio"] or do_pdf["municipio"]
+        out["endereco"] = out["endereco"] or do_pdf["endereco"]
     return out
 
 
