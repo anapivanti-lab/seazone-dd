@@ -113,11 +113,18 @@ def _juntar_letras_espacadas(linha: str) -> str:
     return " ".join(saida).strip()
 
 
+def _normalizar_cartao(texto: str) -> str:
+    """Aplica _juntar_letras_espacadas linha a linha. Idempotente: linhas já normais
+    passam intactas. Necessário porque o pypdf extrai o cartão da Receita com cada
+    letra/dígito separada por espaço."""
+    return "\n".join(_juntar_letras_espacadas(l) for l in texto.splitlines())
+
+
 def _ler_cartao_do_pdf(texto: str) -> dict:
     """Fallback quando a BrasilAPI não tem o CNPJ (típico de empresa recém-aberta):
     lê razão social, logradouro, número, bairro, município, UF e CEP direto do
     texto do Cartão CNPJ da Receita."""
-    linhas = [_juntar_letras_espacadas(l) for l in texto.splitlines() if l.strip()]
+    linhas = [l for l in _normalizar_cartao(texto).splitlines() if l.strip()]
 
     def proximo_valor(*rotulos: str) -> str:
         rx = re.compile("|".join(rotulos), re.I)
@@ -151,10 +158,10 @@ def extrair_cartao_cnpj(caminho: str) -> dict:
     """Lê o Cartão CNPJ e devolve documento (CNPJ), razão social, endereço, UF e
     município. Tenta a BrasilAPI primeiro (mais limpo); se ela não tem o CNPJ
     (empresa recém-aberta, fora do ar), lê os dados do próprio PDF do cartão."""
-    texto = _texto_documento(caminho)
+    texto = _normalizar_cartao(_texto_documento(caminho))
     m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", texto)
     if not m:  # não achou no texto -> tenta OCR da imagem (cartão escaneado/foto)
-        texto = _texto_documento(caminho, ocr=True)
+        texto = _normalizar_cartao(_texto_documento(caminho, ocr=True))
         m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", texto)
     cnpj = re.sub(r"\D", "", m.group(0)) if m else ""
     out = {"ok": bool(cnpj), "tipo": "PJ", "documento": cnpj,
