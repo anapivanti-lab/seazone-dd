@@ -79,6 +79,36 @@ def registrar(d: dict, url_pasta: str = "") -> dict:
     return rec
 
 
+def importar_planilha(caminho: str) -> int:
+    """Importa as DDs já feitas de uma planilha (xlsx) para o cadastro do sistema.
+    Colunas: Franquia | CNPJ | Representante | CPF | Cidade/UF | Risco | Link | Obs.
+    Não duplica (chaveia por CNPJ+CPF). Devolve quantas foram adicionadas."""
+    from openpyxl import load_workbook
+    wb = load_workbook(caminho)
+    ws = wb.active
+    regs = listar()
+    chaves = {(r.get("cnpj"), r.get("cpf")) for r in regs if (r.get("cnpj") or r.get("cpf"))}
+    add = 0
+    for row in ws.iter_rows(min_row=2):
+        v = [(c.value if c.value is not None else "") for c in row[:8]]
+        while len(v) < 8:
+            v.append("")
+        franquia, cnpj, rep, cpf, cidade, risco, _link, obs = [str(x).strip() for x in v]
+        link = (row[6].hyperlink.target if (len(row) > 6 and row[6].hyperlink) else "") or ""
+        if not any([franquia, cnpj, rep, cpf, obs]):
+            continue
+        chave = (cnpj or None, cpf or None)
+        if any(chave) and chave in chaves:
+            continue
+        regs.append({"id": "", "franquia": franquia, "cnpj": cnpj, "representante": rep, "cpf": cpf,
+                     "cidade_uf": cidade, "risco": risco, "link": link, "obs": obs, "data": ""})
+        if any(chave):
+            chaves.add(chave)
+        add += 1
+    _caminho().write_text(json.dumps(regs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return add
+
+
 # ---------------------------------------------------------------- página /controle
 _ESTILO = """
 body{font-family:'Segoe UI',Arial,sans-serif;color:#1a2332;margin:0;background:#f4f6f8}
