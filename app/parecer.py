@@ -16,7 +16,7 @@ import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
-from . import ia_local
+from . import drive_links, ia_local
 from .extrator import _texto_documento
 from .pep import checar as checar_pep
 from .storage import _slug
@@ -367,6 +367,13 @@ def gerar(job) -> dict:
         "recomendacoes": concl["recs"], "concl_fecho": concl["fecho"],
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"), "data_extenso": _data_extenso(),
     }
+    # Links clicáveis do Drive para as certidões/arquivos já sincronizados
+    nomes = [it["arquivo"] for e in entidades for it in e.get("itens", []) if it["arquivo"]]
+    try:
+        d["urls"], d["url_pasta"] = drive_links.urls_da_pasta(pasta.name, nomes)
+    except Exception:
+        d["urls"], d["url_pasta"] = {}, ""
+
     # HTML do relatório (vira PDF no endpoint, via Chromium — formato compartilhável)
     d["relatorio_html"] = _relatorio_html(d, _criterios(entidades))
     d["html"] = _pagina_html(d)
@@ -478,8 +485,14 @@ def _salvar_docx(pasta: Path, d) -> Path:
         label(e["papel"] + ":", e["qualificacao"])
 
     secao("2. Documentos analisados")
-    doc.add_paragraph(f"As certidões e documentos analisados constam no Relatório da DD "
-                      f"(arquivo “{ARQ_RELATORIO}”), salvo na mesma pasta desta Due Diligence.")
+    p = doc.add_paragraph()
+    if d.get("url_pasta"):
+        p.add_run(f"As certidões e o relatório completo (“{ARQ_RELATORIO}”) estão na pasta da DD no Drive: ")
+        _hyperlink(p, d["url_pasta"], "abrir a pasta")
+        p.add_run(".")
+    else:
+        p.add_run(f"As certidões e documentos analisados constam no Relatório da DD "
+                  f"(arquivo “{ARQ_RELATORIO}”), salvo na mesma pasta desta Due Diligence.")
 
     secao("3. Parecer")
     for e in d["entidades"]:
@@ -549,6 +562,11 @@ def _corpo_html(d) -> str:
     else:
         concl = f"<p>{d['concl_texto']}</p>"
     idtxt = f" · #{d['id_suporte']}" if d["id_suporte"] else ""
+    if d.get("url_pasta"):
+        docs2 = (f'As certidões e o relatório completo estão na '
+                 f'<a href="{d["url_pasta"]}" target="_blank">pasta da DD no Drive ↗</a>.')
+    else:
+        docs2 = f'As certidões e documentos analisados constam no <b>Relatório da DD</b> (arquivo “{ARQ_RELATORIO}”), na mesma pasta.'
     return f"""
     <div class="cab">
       <h1>Parecer Jurídico — Due Diligence{idtxt}</h1>
@@ -557,11 +575,10 @@ def _corpo_html(d) -> str:
     </div>
     <h2>1. Qualificação</h2>{quals}
     <h2>2. Documentos analisados</h2>
-    <p>As certidões e documentos analisados constam no <b>Relatório da DD</b> (arquivo “{ARQ_RELATORIO}”), na mesma pasta.</p>
+    <p>{docs2}</p>
     <h2>3. Parecer</h2>{blocos}
     <h2>4. Conclusão</h2>{concl}
     <p class="fim">{d['data_extenso']}</p>
-    <p class="fim">Relatório completo da DD: <b>{ARQ_RELATORIO}</b> (na mesma pasta).</p>
     """
 
 
@@ -604,6 +621,8 @@ ol{margin:.3rem 0 .3rem 1.2rem}ol li{margin:.25rem 0}
 def _relatorio_html(d, criterios) -> str:
     cor = _CORES.get(d["risco"], "#1a7d3c")
     idtxt = f" · #{d['id_suporte']}" if d["id_suporte"] else ""
+    pasta_btn = (f'<a class="btn-parecer" href="{d.get("url_pasta")}" target="_blank">📁 Abrir a pasta da DD no Drive</a>'
+                 if d.get("url_pasta") else "")
 
     ident = ""
     for e in d["entidades"]:
@@ -616,7 +635,13 @@ def _relatorio_html(d, criterios) -> str:
         linhas = ""
         for it in e.get("itens", []):
             ic, txt, c = _SIT.get(it["status"], ("•", it["status"], "#8a97a3"))
-            arq = f'<span class="arq">{it["arquivo"]}</span>' if it["arquivo"] else "—"
+            url = d.get("urls", {}).get(it["arquivo"], "") if it["arquivo"] else ""
+            if url:
+                arq = f'<a href="{url}" target="_blank">abrir ↗</a>'
+            elif it["arquivo"]:
+                arq = f'<span class="arq">{it["arquivo"]}</span>'
+            else:
+                arq = "—"
             linhas += (f'<tr><td>{it["nome"]}</td>'
                        f'<td style="color:{c};white-space:nowrap">{ic} {txt}</td><td>{arq}</td></tr>')
         tabelas += (f'<div class="card"><h2>{e["papel"]}</h2>'
@@ -655,9 +680,10 @@ def _relatorio_html(d, criterios) -> str:
     <div class="card"><h2>Conclusão</h2>
       <p>Risco: <b style="color:{cor}">{d['risco']}</b>.</p>{recs}
       <p>📄 <b>Parecer Jurídico:</b> arquivo <b>{ARQ_PARECER}</b> (na mesma pasta da DD).</p>
+      {pasta_btn}
     </div>
-    <div class="card" style="background:#eef6ff"><b>Para compartilhar:</b> envie o link desta
-      pasta no Google Drive — ela contém este relatório, o parecer e todas as certidões listadas acima.</div>
+    <div class="card" style="background:#eef6ff"><b>Para compartilhar:</b> envie o link da
+      pasta da DD no Google Drive (botão acima) — ela contém este relatório, o parecer e todas as certidões.</div>
     <p class="rodape">Documento gerado automaticamente — revise antes de encaminhar ao setor de Franquias.</p>
     """
     return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
