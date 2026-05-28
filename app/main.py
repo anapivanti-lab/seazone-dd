@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from .checklist import itens_para
 from .config import PASTA_PROCESSOS
 from .busca_municipal import buscar as buscar_municipal_site
-from .extrator import extrair_cartao_cnpj, extrair_identidade
+from .extrator import extrair_cartao_cnpj, extrair_identidade, extrair_tudo, mesclar
 from .leitor import analisar
 from .models import Contexto, TipoPessoa
 from .ocr import ler as ler_identidade
@@ -154,19 +154,56 @@ async def buscar_municipal(cidade: str, uf: str = ""):
 
 
 @app.post("/ler-documento")
-async def ler_documento(tipo: str = Form(...), arquivo: UploadFile = File(...)):
-    """Lê o documento anexado (PJ = Cartão CNPJ; PF = identidade), imagem ou PDF,
-    e devolve os campos que conseguiu extrair (você completa o que faltar)."""
-    conteudo = await arquivo.read()
-    nome = arquivo.filename or "documento"
-    suf = Path(nome).suffix.lower() or (".pdf" if conteudo[:4] == b"%PDF" else ".png")
-    tmp = PASTA_PROCESSOS / ("_doc_" + _slug(Path(nome).stem) + suf)
-    tmp.write_bytes(conteudo)
-    try:
-        dados = extrair_cartao_cnpj(str(tmp)) if tipo == "PJ" else extrair_identidade(str(tmp))
-    except Exception as e:
-        dados = {"ok": False, "erro": f"Falha ao ler o documento: {e}"}
-    return JSONResponse(dados)
+async def ler_documento(
+    tipo: str = Form("auto"),
+    arquivo: UploadFile | None = File(None),
+    arquivos: list[UploadFile] = File(default=[]),
+):
+    """Lê QUALQUER documento (imagem ou PDF) — Cartão CNPJ, RG, CNH, contrato,
+    certidão, qualquer coisa — e tenta extrair tudo que conseguir: CNPJ, razão
+    social, endereço, CPF, nome, RG, nome da mãe, data de nascimento. Aceita
+    UM ou VÁRIOS arquivos (multipart 'arquivos' OU 'arquivo'). Quando vários,
+    mescla os dados (Cartão CNPJ traz PJ; RG traz PF — junto vira tudo).
+
+    tipo='PJ' ou 'PF' (modo antigo, compatibilidade) força a leitura
+    específica. tipo='auto' (padrão) deixa o sistema detectar."""
+    lista = [a for a in (arquivos or []) if a is not None]
+    if arquivo is not None:
+        lista.append(arquivo)
+    if not lista:
+        return JSONResponse({"ok": False, "erro": "Nenhum arquivo enviado."})
+
+    async def _ler(a: UploadFile) -> dict:
+        conteudo = await a.read()
+        nome = a.filename or "documento"
+        suf = Path(nome).suffix.lower() or (".pdf" if conteudo[:4] == b"%PDF" else ".png")
+        tmp = PASTA_PROCESSOS / ("_doc_" + _slug(Path(nome).stem) + suf)
+        tmp.write_bytes(conteudo)
+        try:
+            if tipo == "PJ":
+                d = extrair_cartao_cnpj(str(tmp))
+                # mapeia pro formato novo
+                if d.get("ok"):
+                    d.setdefault("documento_pj", d.get("documento", ""))
+                    d.setdefault("nome_pj", d.get("nome", ""))
+                return d
+            if tipo == "PF":
+                d = extrair_identidade(str(tmp))
+                if d.get("ok"):
+                    d.setdefault("documento_pf", d.get("documento", ""))
+                    d.setdefault("nome_pf", d.get("nome", ""))
+                return d
+            # auto = lê PJ e PF do mesmo arquivo
+            return await asyncio.to_thread(extrair_tudo, str(tmp))
+        except Exception as e:
+            return {"ok": False, "erro": f"Falha ao ler {nome}: {e}"}
+
+    resultados = []
+    for a in lista:
+        resultados.append(await _ler(a))
+    final = mesclar(resultados) if len(resultados) > 1 else resultados[0]
+    final["arquivos_lidos"] = [a.filename for a in lista]
+    return JSONResponse(final)
 
 
 @app.post("/ler-identidade")

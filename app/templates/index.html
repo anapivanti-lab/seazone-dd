@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due Diligence de Franquias — Seazone</title>
-  <link rel="stylesheet" href="/static/style.css?v=30">
+  <link rel="stylesheet" href="/static/style.css?v=31">
 </head>
 <body>
   <header>
@@ -34,15 +34,16 @@
         <input type="hidden" name="tipo" id="tipo">
       </div>
       <div class="upload-zona">
-        <div class="upload-info">📎 Anexe o <b id="docLabel">Cartão CNPJ</b>
-          <span class="obs">— imagem ou PDF; o sistema lê e preenche os campos abaixo.</span>
+        <div class="upload-info">📎 Anexe <b id="docLabel">qualquer documento</b>
+          <span class="obs">— Cartão CNPJ, RG, CNH, contrato, certidão… imagem ou PDF.
+            Pode anexar <b>vários ao mesmo tempo</b> que o sistema lê tudo e preenche os campos abaixo (CNPJ, razão social, endereço, CPF, nome, RG, mãe, nascimento).</span>
         </div>
         <div class="upload-acao">
-          <input id="docFile" type="file" accept="image/*,application/pdf">
-          <button type="button" id="btnLer" class="secundario">Ler documento</button>
+          <input id="docFile" type="file" accept="image/*,application/pdf" multiple>
+          <button type="button" id="btnLer" class="secundario">Ler tudo</button>
         </div>
       </div>
-      <p id="lerStatus" class="obs">Anexe o documento e o sistema preenche os dados abaixo —
+      <p id="lerStatus" class="obs">Anexe os documentos e o sistema preenche os dados abaixo —
         você só completa o que não der pra ler e o endereço.</p>
 
       <div id="campos">
@@ -127,6 +128,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=30"></script>
+  <script src="/static/app.js?v=31"></script>
 </body>
 </html>

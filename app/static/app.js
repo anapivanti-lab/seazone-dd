@@ -44,27 +44,33 @@ function ajustarTipo() {
   if (form.nome) form.nome.placeholder = pf ? "(complete se não vier)" : "(vem do documento)";
 }
 
-// Lê o documento anexado (Cartão CNPJ ou identidade) e preenche os campos
+// Lê os documentos anexados (qualquer combinação — Cartão CNPJ + RG + …) e preenche os campos.
+// O backend extrai PJ e PF de cada arquivo, mescla os resultados, e devolve tudo num único dict.
 async function lerDocumento() {
-  if (!docFile.files[0]) {
-    lerStatus.textContent = "Anexe o arquivo (imagem ou PDF) primeiro.";
+  const arquivos = docFile.files;
+  if (!arquivos || !arquivos.length) {
+    lerStatus.textContent = "Anexe pelo menos um arquivo (imagem ou PDF) primeiro.";
     return;
   }
-  lerStatus.textContent = "Lendo o documento e conferindo o CPF (várias leituras)… pode levar uns 15 segundos.";
+  const n = arquivos.length;
+  lerStatus.textContent = `Lendo ${n} arquivo${n > 1 ? "s" : ""} e conferindo CPF/CNPJ (várias leituras)… pode levar uns ${15 * n} segundos.`;
   const fd = new FormData();
-  fd.append("tipo", tipoAtual());
-  fd.append("arquivo", docFile.files[0]);
+  fd.append("tipo", "auto");                       // detecção automática
+  for (const f of arquivos) fd.append("arquivos", f);
   let d;
   try {
     const r = await fetch("/ler-documento", { method: "POST", body: fd });
     d = await r.json();
   } catch (e) {
-    lerStatus.textContent = "Falha ao enviar o documento.";
+    lerStatus.textContent = "Falha ao enviar os documentos.";
     return;
   }
   const set = (campo, v) => { if (form[campo] && v) form[campo].value = v; };
-  set("documento", d.documento);
-  set("nome", d.nome);
+  // Preenche o documento principal conforme o Papel escolhido — PJ usa documento_pj, PF usa documento_pf.
+  // Se não vier o do papel atual, cai no que veio (compatibilidade) ou no outro.
+  const pj = tipoAtual() === "PJ";
+  set("documento", (pj ? d.documento_pj : d.documento_pf) || d.documento || (pj ? d.documento_pf : d.documento_pj));
+  set("nome",      (pj ? d.nome_pj      : d.nome_pf)      || d.nome      || (pj ? d.nome_pf      : d.nome_pj));
   set("uf", d.uf);
   set("municipio", d.municipio);
   set("endereco", d.endereco);
@@ -73,10 +79,25 @@ async function lerDocumento() {
   set("data_nascimento", d.data_nascimento);
   set("orgao_expedidor", d.orgao_expedidor);
   set("nome_pai", d.nome_pai);
-  let msg = d.ok
-    ? "✅ Li o documento. Confira os campos e complete o que faltar (e o endereço)."
-    : "⚠️ " + (d.erro || "Não consegui ler tudo.") + " Preencha os campos à mão.";
-  if (d.tipo === "PF" && !d.documento) msg += " ⚠️ Não li o CPF com segurança — digite o CPF à mão.";
+
+  const achados = [];
+  if (d.documento_pj) achados.push("CNPJ");
+  if (d.nome_pj) achados.push("razão social");
+  if (d.endereco) achados.push("endereço");
+  if (d.documento_pf) achados.push("CPF");
+  if (d.nome_pf) achados.push("nome");
+  if (d.rg) achados.push("RG");
+  if (d.nome_mae) achados.push("mãe");
+  if (d.data_nascimento) achados.push("nascimento");
+
+  let msg;
+  if (d.ok && achados.length) {
+    msg = `✅ Li ${n} arquivo${n > 1 ? "s" : ""}. Encontrei: ${achados.join(", ")}. Confira e complete o que faltar.`;
+  } else {
+    msg = "⚠️ " + (d.erro || "Não consegui ler nada.") + " Preencha os campos à mão.";
+  }
+  if (!pj && !d.documento_pf && !d.documento) msg += " ⚠️ Não li o CPF com segurança — digite à mão.";
+  if (pj && !d.documento_pj && !d.documento) msg += " ⚠️ Não li o CNPJ — digite à mão.";
   lerStatus.textContent = msg;
   carregarChecklist();
   buscarMunicipal();

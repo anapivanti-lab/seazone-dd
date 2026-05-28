@@ -354,3 +354,136 @@ def extrair_identidade(caminho: str) -> dict:
     if not ok:
         out["erro"] = "Não consegui ler o documento. Preencha os campos à mão."
     return out
+
+
+def _extrair_pj_do_texto(texto: str, caminho: str) -> dict:
+    """Tenta achar CNPJ no texto e, se achar, consulta a BrasilAPI; senão lê do PDF."""
+    t = _normalizar_cartao(texto)
+    m = re.search(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", t)
+    if not m:
+        return {}
+    cnpj = re.sub(r"\D", "", m.group(0))
+    out = {"documento_pj": cnpj}
+    dados = consultar_cnpj(cnpj)
+    if dados:
+        out.update(nome_pj=dados.get("razao_social", ""), uf=dados.get("uf", ""),
+                   municipio=dados.get("municipio", ""), endereco=dados.get("endereco", ""))
+    if not (out.get("nome_pj") and out.get("endereco")):
+        do_pdf = _ler_cartao_do_pdf(t)
+        out["nome_pj"] = out.get("nome_pj") or do_pdf["razao_social"]
+        out["uf"] = out.get("uf") or do_pdf["uf"]
+        out["municipio"] = out.get("municipio") or do_pdf["municipio"]
+        out["endereco"] = out.get("endereco") or do_pdf["endereco"]
+    return {k: v for k, v in out.items() if v}
+
+
+def _extrair_pf_do_texto(texto: str, caminho: str) -> dict:
+    """Tenta achar dados de PF (CPF, nome, RG, mãe, nascimento) no texto."""
+    linhas = [l.strip() for l in texto.splitlines() if l.strip()]
+    plano = " ".join(texto.split())
+    cpf = melhor_cpf(caminho, texto)
+
+    rg = ""
+    m = re.search(r"(?:REGISTRO GERAL|REG[.\s]*GERAL|\bRG\b|DOC[.\s/]*IDENTIDADE|IDENTIDADE)[^\d]{0,30}(\d[\d.\-]{5,12}\w?)",
+                  texto, re.I)
+    if m:
+        rg = m.group(1).strip(" .-")
+
+    orgao = ""
+    mo = re.search(r"\b\d{6,9}\s+([A-ZÀ-Ú]{2,8})(?:[\s/\-]+([A-Z]{2})\b)?", texto)
+    if mo and _cmp(mo.group(1)) not in _BOILER:
+        orgao = mo.group(1) + ("/" + mo.group(2) if mo.group(2) else "")
+
+    ano_max = datetime.date.today().year - 16
+    cands = []
+    for dd, mm, yy in re.findall(r"\b(\d{2})/(\d{2})/(\d{4})\b", plano):
+        y, mth, d = int(yy), int(mm), int(dd)
+        if 1920 <= y <= ano_max and 1 <= mth <= 12 and 1 <= d <= 31:
+            cands.append((y, mth, d, f"{dd}/{mm}/{yy}"))
+    mnasc = re.search(r"NASC\w*\D{0,20}(\d{2})/(\d{2})/(\d{4})", texto, re.I)
+    if mnasc and 1920 <= int(mnasc.group(3)) <= ano_max:
+        data_nascimento = f"{mnasc.group(1)}/{mnasc.group(2)}/{mnasc.group(3)}"
+    elif cands:
+        data_nascimento = sorted(cands)[0][3]
+    else:
+        data_nascimento = ""
+
+    nome_mae = nome_pai = ""
+    for i, l in enumerate(linhas):
+        if re.search(r"filia", l, re.I):
+            cand = [x for x in linhas[i + 1:i + 6] if _eh_nome(x)]
+            if len(cand) >= 2:
+                nome_pai, nome_mae = cand[0], cand[1]
+            elif cand:
+                nome_mae = cand[0]
+            break
+    # Fallback: "Nome da Mãe: FULANA"
+    if not nome_mae:
+        m2 = re.search(r"m[aã]e[:\s]+([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú ]{4,})", texto, re.I)
+        if m2:
+            nome_mae = m2.group(1).strip()
+    nome_mae, nome_pai = _limpar_nome(nome_mae), _limpar_nome(nome_pai)
+
+    nome = ""
+    for i, l in enumerate(linhas):
+        if re.search(r"\bNOME\b", l, re.I) and not re.search(r"filia|m[ãa]e|pai|social", l, re.I):
+            c = [x for x in linhas[i + 1:i + 3] if _eh_nome(x)]
+            if c:
+                nome = _limpar_nome(c[0])
+                break
+    if not nome:
+        nome = _achar_nome_titular(linhas, nome_mae, nome_pai)
+
+    out = {}
+    if cpf: out["documento_pf"] = cpf
+    if nome: out["nome_pf"] = nome
+    if rg: out["rg"] = rg
+    if nome_mae: out["nome_mae"] = nome_mae
+    if nome_pai: out["nome_pai"] = nome_pai
+    if data_nascimento: out["data_nascimento"] = data_nascimento
+    if orgao: out["orgao_expedidor"] = orgao
+    return out
+
+
+def extrair_tudo(caminho: str) -> dict:
+    """Lê QUALQUER documento (imagem ou PDF) e tenta extrair tudo — PJ e PF — sem
+    depender do usuário dizer o tipo. Devolve um dict com os campos que conseguiu.
+
+    O texto é lido UMA vez com OCR forte (português + inglês + texto esparso) e
+    aplicado nas duas extrações. Funciona com Cartão CNPJ, RG, CNH, contrato
+    social, comprovantes, certidões — qualquer documento."""
+    texto = _texto_documento(caminho, ocr=True, passes=PASSES_ID)
+    pj = _extrair_pj_do_texto(texto, caminho)
+    pf = _extrair_pf_do_texto(texto, caminho)
+    achou = bool(pj or pf)
+    out = {"ok": achou, **pj, **pf}
+    if not achou:
+        out["erro"] = "Não consegui extrair nada deste documento. Tente outro arquivo ou preencha à mão."
+    return out
+
+
+def mesclar(resultados: list[dict]) -> dict:
+    """Junta vários resultados de extrair_tudo() em um único dict. Primeiro valor
+    não-vazio vence (ex.: Cartão CNPJ traz CNPJ+endereço+razão social; RG traz
+    CPF+nome+mãe+nascimento — combinados dão a DD completa)."""
+    final: dict = {"ok": False}
+    for r in resultados or []:
+        if not isinstance(r, dict):
+            continue
+        if r.get("ok"):
+            final["ok"] = True
+        for k, v in r.items():
+            if k in ("ok", "erro", "tipo"):
+                continue
+            if v and not final.get(k):
+                final[k] = v
+    # Compatibilidade com a UI antiga: tipo+documento+nome principais
+    if final.get("documento_pj") and not final.get("documento"):
+        final["documento"] = final["documento_pj"]
+        final["nome"] = final.get("nome_pj") or final.get("nome", "")
+        final["tipo"] = "PJ"
+    elif final.get("documento_pf") and not final.get("documento"):
+        final["documento"] = final["documento_pf"]
+        final["nome"] = final.get("nome_pf") or final.get("nome", "")
+        final["tipo"] = "PF"
+    return final
