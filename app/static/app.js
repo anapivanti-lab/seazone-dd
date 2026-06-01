@@ -217,16 +217,40 @@ function buscarMunicipal() {
 }
 form.municipio.addEventListener("input", buscarMunicipal);
 
+const btnIniciar = form.querySelector('button[type="submit"]');
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const resp = await fetch("/emitir", { method: "POST", body: new FormData(form) });
-  const { job_id } = await resp.json();
-  jobAtual = job_id;
-  outroBox.hidden = false;
-  processoBox.hidden = false;
-  acoes.hidden = false;
-  ultimoRender = "";
-  acompanhar();
+  const doc = (form.documento.value || "").trim();
+  if (!doc) {
+    lerStatus.textContent = "⚠️ Preencha o CNPJ/CPF (anexe o documento acima, ou digite à mão no campo).";
+    form.documento.focus();
+    return;
+  }
+  btnIniciar.disabled = true;
+  btnIniciar.textContent = "Iniciando…";
+  try {
+    const resp = await fetch("/emitir", { method: "POST", body: new FormData(form) });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      lerStatus.textContent = `⚠️ Erro ao iniciar (${resp.status}): ${txt.slice(0, 200)}`;
+      btnIniciar.disabled = false;
+      btnIniciar.textContent = "Iniciar DD";
+      return;
+    }
+    const { job_id } = await resp.json();
+    jobAtual = job_id;
+    outroBox.hidden = false;
+    processoBox.hidden = false;
+    acoes.hidden = false;
+    ultimoRender = "";
+    btnIniciar.textContent = "DD em andamento ✓";
+    acompanhar();
+  } catch (err) {
+    lerStatus.textContent = `⚠️ Não consegui iniciar a DD: ${err.message}. O servidor está ligado?`;
+    btnIniciar.disabled = false;
+    btnIniciar.textContent = "Iniciar DD";
+  }
 });
 
 async function enviar(item, file) {
