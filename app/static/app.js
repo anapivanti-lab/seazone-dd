@@ -181,8 +181,51 @@ async function carregarChecklist() {
   );
   render(await r.json(), false);
 }
-papelSel.addEventListener("change", () => { ajustarTipo(); carregarChecklist(); });
-mesmaPessoa.addEventListener("change", () => { popularPapeis(); ajustarTipo(); carregarChecklist(); });
+// Limpa a tela para começar um NOVO papel (PJ→PF, ou trocar entre PFs).
+// Mantém o ID Suporte e o checkbox "mesma pessoa" (são da DD inteira, não do papel).
+// A pasta no Drive continua a mesma — o backend reaproveita por ID Suporte.
+function resetParaNovoPapel() {
+  jobAtual = null;
+  ultimoRender = "";
+  ultimoProc = "";
+  ["documento", "nome", "rg", "nome_mae", "data_nascimento", "orgao_expedidor",
+   "nome_pai", "endereco", "municipio", "uf", "estado_civil"].forEach((c) => {
+    if (form[c]) form[c].value = "";
+  });
+  if (docFile) docFile.value = "";
+  if (lerStatus) lerStatus.textContent = "Anexe o documento do novo papel — o sistema lê e preenche.";
+  outroBox.hidden = true;
+  processoBox.hidden = true;
+  acoes.hidden = true;
+  parecerBox.innerHTML = "";
+  processosDiv.innerHTML = "";
+  cnpjBox.innerHTML = "";
+  estadoTag.textContent = "";
+  pastaP.textContent = "";
+  if (municipalBox) municipalBox.innerHTML = "";
+  if (municipalUrlInput) municipalUrlInput.value = "";
+  btnIniciar.disabled = false;
+  btnIniciar.textContent = "Iniciar DD";
+}
+
+function trocarPapel(repop) {
+  if (jobAtual) {
+    const ok = confirm(
+      "Trocar de papel? A checklist será reiniciada para o novo papel.\n\n" +
+      "✅ A pasta da DD continua a mesma — os PDFs já anexados ficam salvos lá.\n" +
+      "Você vai anexar o documento novo (RG/CNH para PF, Cartão CNPJ para PJ) e clicar em \"Iniciar DD\" de novo."
+    );
+    if (!ok) return false;
+    resetParaNovoPapel();
+  }
+  if (repop) popularPapeis();
+  ajustarTipo();
+  carregarChecklist();
+  return true;
+}
+
+papelSel.addEventListener("change", () => { trocarPapel(false); });
+mesmaPessoa.addEventListener("change", () => { trocarPapel(true); });
 form.uf.addEventListener("input", carregarChecklist);
 form.municipio.addEventListener("input", carregarChecklist);
 popularPapeis();
