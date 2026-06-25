@@ -6,8 +6,16 @@ riscos. 100% local e gratuito (sem IA paga); best-effort conforme o tribunal.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from pypdf import PdfReader
+
+
+def _norm_txt(s: str) -> str:
+    """MAIÚSCULAS, sem acento e com espaços normais — para comparar nomes sem que
+    acento/caixa/variação de espaço atrapalhe."""
+    s = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s.upper()).strip()
 
 _RISCOS = {
     "Criminal": ["criminal", "ação penal", " penal ", "estelionato", "furto", "roubo",
@@ -90,32 +98,73 @@ def _partes(texto):
     return out
 
 
-def _papel_dd(low, ctx, partes):
+def _papel_dd(low, ctx, partes, plano=""):
+    """Localiza a pessoa da DD no processo e diz em que polo ela figura.
+    Procura em 3 camadas (da mais forte pra mais ampla):
+      1) CPF/CNPJ exato entre as partes estruturadas;
+      2) NOME (completo, sem depender de acento/caixa) entre as partes;
+      3) FALLBACK: o CPF ou o nome aparecendo em QUALQUER lugar do texto do processo
+         (a pessoa pode estar no processo sem ter virado "parte" estruturada — doc sem
+         parênteses, layout do tribunal diferente, citada nos fatos, etc.).
+    """
     if not ctx:
         return ""
     doc = re.sub(r"\D", "", getattr(ctx, "documento", "") or "")
     nome = (getattr(ctx, "nome", "") or "").strip()
-    primeiro = nome.split()[0] if nome else ""
+    tokens = [t for t in _norm_txt(nome).split() if len(t) >= 3]  # ignora "de/da/do/dos"
+    primeiro_orig = nome.split()[0].lower() if nome.split() else ""
+
     achou = None
-    for p in partes:
-        if doc and re.sub(r"\D", "", p["doc"]) == doc:
-            achou = p
-            break
-        if primeiro and len(primeiro) > 2 and primeiro.lower() in p["nome"].lower():
-            achou = p
+    # 1) documento exato entre as partes
+    if doc:
+        for p in partes:
+            if re.sub(r"\D", "", p["doc"]) == doc:
+                achou = p
+                break
+    # 2) nome entre as partes: todos os tokens significativos; senão a maioria deles
+    if not achou and tokens:
+        for p in partes:
+            if all(t in _norm_txt(p["nome"]) for t in tokens):
+                achou = p
+                break
+        if not achou and len(tokens) >= 2:
+            for p in partes:
+                pn = _norm_txt(p["nome"])
+                if sum(1 for t in tokens if t in pn) >= len(tokens) - 1:
+                    achou = p
+                    break
+
+    # 3) fallback: procurar a pessoa no TEXTO INTEIRO do processo
+    so_no_texto = False
     if not achou:
-        return ("Não localizei a pessoa da DD entre as partes deste processo — "
-                "confira se o processo realmente se refere a ela.")
+        plano_dig = re.sub(r"\D", "", plano)
+        plano_n = _norm_txt(plano)
+        if doc and doc in plano_dig:
+            so_no_texto = True
+        elif len(tokens) >= 2 and all(t in plano_n for t in tokens):
+            so_no_texto = True
+
+    if not achou and not so_no_texto:
+        return ("Não localizei a pessoa da DD neste processo — confira se o arquivo é o "
+                "processo certo (mesmo CPF ou nome da pessoa da DD).")
+
+    # polo (passivo/ativo) — busca a proximidade do primeiro nome com os termos do polo
     tem_mp = any("MINIST" in p["nome"].upper() for p in partes)
-    pl = primeiro.lower()
+    pl = primeiro_orig
     polo = ""
     if pl and re.search(r"(?:contra|em face de|denunciad[oa]|réu|requerid[oa]|executad[oa])[^.]{0,120}" + re.escape(pl), low):
         polo = "polo passivo (réu / requerido / executado)"
-    elif tem_mp and "ísica" in achou["tipo"]:
+    elif tem_mp and achou and "ísica" in achou.get("tipo", ""):
         polo = "polo passivo (réu em ação penal)"
     elif pl and re.search(re.escape(pl) + r"[^.]{0,80}(?:autor|requerente|exequente|reclamante|ajuíz|promove)", low):
         polo = "polo ativo (autor / exequente)"
-    return f"{achou['nome']} (doc. {achou['doc']}) figura no {polo or 'processo'}."
+
+    if achou:
+        return f"{achou['nome']} (doc. {achou['doc']}) figura no {polo or 'processo'}."
+    # localizada só no corpo do texto (não na lista estruturada de partes)
+    quem = nome or (f"CPF/CNPJ {doc}" if doc else "A pessoa da DD")
+    return (f"{quem} foi localizada no processo (no corpo do documento) e figura no "
+            f"{polo or 'processo'}. Não apareceu na lista estruturada de partes — confira o polo.")
 
 
 def _fatos(texto):
@@ -249,7 +298,7 @@ def analisar(caminho: str, ctx=None) -> dict:
         "valor_causa": valor_causa or (valores[0] if valores else "R$ 0,00"),
         "reu_preso": _valor_apos(linhas, "Réu Preso", "Reu Preso"),
         "partes": partes,
-        "papel_dd": _papel_dd(low, ctx, partes),
+        "papel_dd": _papel_dd(low, ctx, partes, plano),
         "fatos": _fatos(texto),
         "andamentos": andamentos,
         "ultimo_andamento": andamentos[-1] if andamentos else None,

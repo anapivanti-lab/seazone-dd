@@ -132,19 +132,33 @@ async def upload(job_id: str, item: str = Form(...), arquivo: UploadFile = File(
 
 
 @app.post("/ler-processo/{job_id}")
-async def ler_processo(job_id: str, arquivo: UploadFile = File(...)):
-    """Sobe o PDF de um processo e devolve o resumo (número, partes, valores, riscos)."""
+async def ler_processo(
+    job_id: str,
+    arquivo: UploadFile | None = File(None),
+    arquivos: list[UploadFile] = File(default=[]),
+):
+    """Sobe UM ou VÁRIOS PDFs de processos e devolve o resumo de cada um (número,
+    partes, valores, riscos). Aceita 'arquivos' (vários) ou 'arquivo' (um, compat.)."""
     job = JOBS.get(job_id)
     if not job:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
-    conteudo = await arquivo.read()
-    base = _slug(Path(arquivo.filename or "processo").stem)
-    destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, f"PROCESSO_{base}") + ".pdf")
-    destino.write_bytes(conteudo)
-    resumo = analisar(str(destino), job.ctx)
-    resumo["arquivo"] = arquivo.filename
-    job.processos.append(resumo)
-    return JSONResponse(resumo)
+    lista = [a for a in (arquivos or []) if a is not None]
+    if arquivo is not None:
+        lista.append(arquivo)
+    if not lista:
+        return JSONResponse({"erro": "Nenhum arquivo enviado."}, status_code=400)
+
+    resumos = []
+    for a in lista:
+        conteudo = await a.read()
+        base = _slug(Path(a.filename or "processo").stem)
+        destino = job.ctx.pasta_saida / (com_prefixo(job.ctx, f"PROCESSO_{base}") + ".pdf")
+        destino.write_bytes(conteudo)
+        resumo = await asyncio.to_thread(analisar, str(destino), job.ctx)
+        resumo["arquivo"] = a.filename
+        job.processos.append(resumo)
+        resumos.append(resumo)
+    return JSONResponse({"ok": True, "processos": resumos, "total": len(job.processos)})
 
 
 @app.post("/parecer/{job_id}")

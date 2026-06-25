@@ -341,15 +341,19 @@ btnOutro.addEventListener("click", () => {
 });
 
 btnProcesso.addEventListener("click", async () => {
-  if (!processoFile.files[0]) return;
+  const arqs = processoFile.files;
+  if (!arqs || !arqs.length) return;
+  const n = arqs.length;
   btnProcesso.disabled = true;
-  btnProcesso.textContent = "Lendo…";
+  btnProcesso.textContent = n > 1 ? `Lendo ${n} processos…` : "Lendo…";
   const fd = new FormData();
-  fd.append("arquivo", processoFile.files[0]);
-  await fetch("/ler-processo/" + jobAtual, { method: "POST", body: fd });
+  for (const f of arqs) fd.append("arquivos", f);  // vários de uma vez
+  try {
+    await fetch("/ler-processo/" + jobAtual, { method: "POST", body: fd });
+  } catch (e) { /* atualizar() mostra o que entrou */ }
   processoFile.value = "";
   btnProcesso.disabled = false;
-  btnProcesso.textContent = "Ler processo";
+  btnProcesso.textContent = "Ler processo(s)";
   atualizar();
 });
 

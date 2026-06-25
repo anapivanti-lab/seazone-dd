@@ -109,11 +109,12 @@
 
       <fieldset class="outro" id="processoBox" hidden>
         <legend>📄 Leitor de processos</legend>
-        <p class="dica">Baixe o PDF do processo (Jusbrasil/tribunal) e suba aqui — o sistema lê e
-          resume <b>partes, valores e riscos</b> (criminal, fraude, execução, etc.).</p>
+        <p class="dica">Baixe o(s) PDF(s) do(s) processo(s) (Jusbrasil/tribunal) e suba aqui — pode
+          escolher <b>vários de uma vez</b>. O sistema lê e resume <b>partes, valores e riscos</b>
+          (criminal, fraude, execução, etc.).</p>
         <div class="linha">
-          <input id="processoFile" type="file" accept="application/pdf">
-          <button type="button" id="btnProcesso" class="secundario">Ler processo</button>
+          <input id="processoFile" type="file" accept="application/pdf" multiple>
+          <button type="button" id="btnProcesso" class="secundario">Ler processo(s)</button>
         </div>
         <div id="processos"></div>
       </fieldset>
