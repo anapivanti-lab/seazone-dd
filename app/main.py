@@ -49,6 +49,22 @@ async def controle_export():
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+@app.post("/controle/salvar")
+async def controle_salvar(request: Request):
+    """Cria (sem rid) ou edita (com rid) uma DD a partir do formulário da tela."""
+    dados = await request.json()
+    rec = controle.salvar_registro(dados)
+    return JSONResponse({"ok": True, "registro": rec})
+
+
+@app.post("/controle/excluir")
+async def controle_excluir(request: Request):
+    """Exclui uma DD pelo rid."""
+    dados = await request.json()
+    ok = controle.excluir_registro(str(dados.get("rid", "")))
+    return JSONResponse({"ok": ok})
+
+
 @app.get("/provedores")
 async def provedores(tipo: str):
     """Certidões com automação (alimenta as caixinhas de 'abrir site')."""

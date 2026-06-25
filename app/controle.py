@@ -8,11 +8,14 @@ from __future__ import annotations
 import html
 import json
 import re
+import uuid
 from datetime import datetime
 
 from .config import base_saida
 
 ARQ_REG = "_controle_dds.json"
+# Campos editáveis de cada DD (na ordem da tabela)
+CAMPOS = ["id", "franquia", "cnpj", "representante", "cpf", "cidade_uf", "risco", "link", "obs", "data"]
 _COR = {"ALTO": ("#c0392b", "#f8d7da"), "MÉDIO": ("#b8860b", "#fff3cd"), "BAIXO": ("#1a7d3c", "#d4edda")}
 
 
@@ -29,11 +32,62 @@ def _caminho():
     return base_saida() / ARQ_REG
 
 
-def listar() -> list:
+def _salvar(regs: list) -> bool:
     try:
-        return json.loads(_caminho().read_text(encoding="utf-8"))
+        _caminho().write_text(json.dumps(regs, ensure_ascii=False, indent=2), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def _novo_rid() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def listar() -> list:
+    """Lê o cadastro. Garante que todo registro tenha um 'rid' (id estável usado para
+    editar/excluir mesmo depois de reordenar a lista) — se faltar, cria e regrava."""
+    try:
+        regs = json.loads(_caminho().read_text(encoding="utf-8"))
     except Exception:
         return []
+    mudou = False
+    for r in regs:
+        if not r.get("rid"):
+            r["rid"] = _novo_rid()
+            mudou = True
+    if mudou:
+        _salvar(regs)
+    return regs
+
+
+def salvar_registro(dados: dict) -> dict:
+    """Cria (sem rid) ou edita (com rid) uma DD a partir dos campos da tela."""
+    regs = listar()
+    rid = str(dados.get("rid", "") or "").strip()
+    rec = {k: str(dados.get(k, "") or "").strip() for k in CAMPOS}
+    if rid:
+        for r in regs:
+            if r.get("rid") == rid:
+                r.update(rec)
+                _salvar(regs)
+                return r
+    # novo registro
+    rec["rid"] = _novo_rid()
+    if not rec["data"]:
+        rec["data"] = datetime.now().strftime("%d/%m/%Y")
+    regs.append(rec)
+    _salvar(regs)
+    return rec
+
+
+def excluir_registro(rid: str) -> bool:
+    """Exclui a DD pelo rid. Devolve True se removeu algo."""
+    regs = listar()
+    novo = [r for r in regs if r.get("rid") != str(rid)]
+    if len(novo) == len(regs):
+        return False
+    return _salvar(novo)
 
 
 def _record(d: dict, url_pasta: str) -> dict:
@@ -70,13 +124,12 @@ def registrar(d: dict, url_pasta: str = "") -> dict:
             idx = i
             break
     if idx is None:
+        rec["rid"] = _novo_rid()
         regs.append(rec)
     else:
+        rec["rid"] = regs[idx].get("rid") or _novo_rid()  # mantém o id estável ao atualizar
         regs[idx] = rec
-    try:
-        _caminho().write_text(json.dumps(regs, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    _salvar(regs)
     return rec
 
 
@@ -106,7 +159,7 @@ def importar_planilha(caminho: str) -> int:
         if any(chave):
             chaves.add(chave)
         add += 1
-    _caminho().write_text(json.dumps(regs, ensure_ascii=False, indent=2), encoding="utf-8")
+    _salvar(regs)
     return add
 
 
@@ -137,12 +190,31 @@ td a{color:#0b6;font-weight:600;text-decoration:none;white-space:nowrap}
 .obs .txt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .obs .txt.aberto{-webkit-line-clamp:unset}
 .vazio{background:#fff;padding:2rem;text-align:center;border-radius:12px;color:#777}
+.barra{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.btn-add{background:#1a7d3c;color:#fff;border:none;padding:.55rem 1rem;border-radius:8px;font-weight:700;font-size:.85rem;cursor:pointer}
+.acao{cursor:pointer;border:none;background:none;font-size:1rem;padding:.05rem .2rem;line-height:1}
+.acao:hover{transform:scale(1.15)}
+/* modal de edição/criação */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow:auto;z-index:50}
+.modal.aberto{display:flex}
+.card{background:#fff;border-radius:14px;padding:1.4rem 1.5rem;max-width:600px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.card h2{margin:.1rem 0 1rem;font-size:1.15rem;color:#1a2b3c}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.campo{margin-bottom:.6rem}
+.campo.full{grid-column:1/-1}
+.campo label{display:block;font-size:.76rem;color:#5a6b7a;margin-bottom:.2rem;font-weight:600}
+.campo input,.campo select,.campo textarea{width:100%;padding:.5rem .6rem;border:1px solid #ccd5dd;border-radius:8px;font-size:.9rem;font-family:inherit}
+.campo textarea{min-height:72px;resize:vertical}
+.acoes-modal{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1.1rem}
+.btn-cancel{background:#eef1f4;color:#33414f;border:none;padding:.55rem 1.1rem;border-radius:8px;font-weight:600;cursor:pointer}
+.btn-salvar{background:#1a7d3c;color:#fff;border:none;padding:.55rem 1.3rem;border-radius:8px;font-weight:700;cursor:pointer}
+.btn-salvar:disabled{opacity:.6;cursor:default}
 """
 
 _COLGROUP = ("<colgroup>"
-             '<col style="width:50px"><col style="width:15%"><col style="width:128px"><col style="width:14%">'
-             '<col style="width:110px"><col style="width:100px"><col style="width:84px"><col style="width:62px">'
-             '<col><col style="width:78px"></colgroup>')
+             '<col style="width:50px"><col style="width:15%"><col style="width:128px"><col style="width:13%">'
+             '<col style="width:108px"><col style="width:96px"><col style="width:80px"><col style="width:58px">'
+             '<col><col style="width:74px"><col style="width:70px"></colgroup>')
 
 
 def pagina_html() -> str:
@@ -159,12 +231,21 @@ def pagina_html() -> str:
             cf, cb = _COR[risco]
             pills += f'<div class="pill" style="background:{cb};color:{cf}">{risco.title()}<b>{por_risco[risco]}</b></div>'
 
+    e = html.escape
+    # dados crus (não formatados pra exibição) usados pelo formulário de edição
+    dados_js = json.dumps({r["rid"]: r for r in regs}, ensure_ascii=False).replace("</", "<\\/")
+
+    barra = ('<div class="barra">'
+             '<input class="busca" id="q" placeholder="🔎 Filtrar por nome, CNPJ, cidade, risco…" onkeyup="filtra()">'
+             '<button class="btn-add" onclick="nova()">➕ Adicionar DD</button></div>')
+
     if not regs:
-        corpo = '<div class="vazio">Nenhuma DD registrada ainda. Gere um parecer e a DD aparece aqui.</div>'
+        corpo = (barra + '<div class="vazio">Nenhuma DD registrada ainda. '
+                 'Clique em “➕ Adicionar DD” ou gere um parecer que ela aparece aqui.</div>')
     else:
-        e = html.escape
         linhas = ""
         for r in reversed(regs):  # mais recentes primeiro
+            rid = e(r.get("rid", ""))
             risco = (r.get("risco") or "").strip()
             cf, cb = _COR.get(risco.upper(), ("#5a6b7a", "#eef1f4"))
             badge = (f'<span class="risco" style="color:{cf};background:{cb}">{e(risco)}</span>'
@@ -180,16 +261,71 @@ def pagina_html() -> str:
                 f'<td>{e(r.get("cidade_uf", ""))}</td>'
                 f'<td>{badge}</td><td>{link}</td>'
                 f'<td class="obs"><div class="txt" title="{obs}" onclick="this.classList.toggle(\'aberto\')">{obs}</div></td>'
-                f'<td class="muted">{e(r.get("data", ""))}</td></tr>')
+                f'<td class="muted">{e(r.get("data", ""))}</td>'
+                f'<td style="white-space:nowrap">'
+                f'<button class="acao" title="Editar" onclick="editar(\'{rid}\')">✏️</button>'
+                f'<button class="acao" title="Excluir" onclick="excluir(\'{rid}\')">🗑️</button></td></tr>')
         corpo = (
-            '<input class="busca" id="q" placeholder="🔎 Filtrar por nome, CNPJ, cidade, risco…" onkeyup="filtra()">'
+            barra +
             f'<div class="tabela"><table id="tab">{_COLGROUP}'
             '<thead><tr><th>ID</th><th>Franquia</th><th>CNPJ</th><th>Representante / Operador</th>'
-            '<th>CPF</th><th>Cidade/UF</th><th>Risco</th><th>Pasta</th><th>Observações</th><th>Data</th></tr></thead>'
-            f'<tbody>{linhas}</tbody></table></div>'
-            '<script>function filtra(){var q=document.getElementById("q").value.toLowerCase();'
-            'document.querySelectorAll("#tab tbody tr").forEach(function(tr){'
-            'tr.style.display=tr.innerText.toLowerCase().includes(q)?"":"none";});}</script>')
+            '<th>CPF</th><th>Cidade/UF</th><th>Risco</th><th>Pasta</th><th>Observações</th><th>Data</th>'
+            '<th>Ações</th></tr></thead>'
+            f'<tbody>{linhas}</tbody></table></div>')
+
+    modal = (
+        '<div class="modal" id="modal"><div class="card">'
+        '<h2 id="modal_titulo">Editar DD</h2><input type="hidden" id="f_rid">'
+        '<div class="grid2">'
+        '<div class="campo"><label>ID Suporte (Pipefy)</label><input id="f_id"></div>'
+        '<div class="campo"><label>Data</label><input id="f_data" placeholder="dd/mm/aaaa"></div>'
+        '<div class="campo full"><label>Franquia (razão social)</label><input id="f_franquia"></div>'
+        '<div class="campo"><label>CNPJ</label><input id="f_cnpj"></div>'
+        '<div class="campo"><label>Cidade/UF</label><input id="f_cidade_uf"></div>'
+        '<div class="campo full"><label>Representante / Operador</label><input id="f_representante"></div>'
+        '<div class="campo"><label>CPF</label><input id="f_cpf"></div>'
+        '<div class="campo"><label>Risco</label><select id="f_risco">'
+        '<option value="">—</option><option value="BAIXO">BAIXO</option>'
+        '<option value="MÉDIO">MÉDIO</option><option value="ALTO">ALTO</option></select></div>'
+        '<div class="campo full"><label>Link da pasta (Drive)</label><input id="f_link" placeholder="https://..."></div>'
+        '<div class="campo full"><label>Observações</label><textarea id="f_obs"></textarea></div>'
+        '</div>'
+        '<div class="acoes-modal"><button class="btn-cancel" onclick="fecharModal()">Cancelar</button>'
+        '<button class="btn-salvar" id="btnSalvar" onclick="salvar()">Salvar</button></div>'
+        '</div></div>')
+
+    script = (
+        '<script>'
+        f'const REGS={dados_js};'
+        'const CAMPOS=["rid","id","franquia","cnpj","representante","cpf","cidade_uf","risco","link","obs","data"];'
+        'function filtra(){var q=document.getElementById("q").value.toLowerCase();'
+        'document.querySelectorAll("#tab tbody tr").forEach(function(tr){'
+        'tr.style.display=tr.innerText.toLowerCase().includes(q)?"":"none";});}'
+        'function gv(id){return document.getElementById(id);}'
+        'function sv(id,v){gv(id).value=(v==null?"":v);}'
+        'function abrir(){gv("modal").classList.add("aberto");}'
+        'function fecharModal(){gv("modal").classList.remove("aberto");}'
+        'function nova(){CAMPOS.forEach(function(c){sv("f_"+c,"");});'
+        'gv("modal_titulo").textContent="Adicionar DD";abrir();}'
+        'function editar(rid){var r=REGS[rid]||{};'
+        'sv("f_rid",rid);sv("f_id",r.id);sv("f_franquia",r.franquia);sv("f_cnpj",r.cnpj);'
+        'sv("f_representante",r.representante);sv("f_cpf",r.cpf);sv("f_cidade_uf",r.cidade_uf);'
+        'sv("f_risco",(r.risco||"").toUpperCase());sv("f_link",r.link);sv("f_obs",r.obs);sv("f_data",r.data);'
+        'gv("modal_titulo").textContent="Editar DD";abrir();}'
+        'async function salvar(){var body={};CAMPOS.forEach(function(c){body[c]=gv("f_"+c).value;});'
+        'var b=gv("btnSalvar");b.disabled=true;b.textContent="Salvando…";'
+        'try{var r=await fetch("/controle/salvar",{method:"POST",'
+        'headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});'
+        'if(!r.ok)throw 0;location.reload();}'
+        'catch(e){b.disabled=false;b.textContent="Salvar";alert("Não consegui salvar. Tente de novo.");}}'
+        'async function excluir(rid){var r=REGS[rid]||{};'
+        'if(!confirm("Excluir a DD \\""+(r.franquia||"")+"\\"? Isso não pode ser desfeito."))return;'
+        'try{var resp=await fetch("/controle/excluir",{method:"POST",'
+        'headers:{"Content-Type":"application/json"},body:JSON.stringify({rid:rid})});'
+        'if(!resp.ok)throw 0;location.reload();}'
+        'catch(e){alert("Não consegui excluir. Tente de novo.");}}'
+        'document.addEventListener("keydown",function(ev){if(ev.key==="Escape")fecharModal();});'
+        '</script>')
 
     return (f'<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -197,7 +333,7 @@ def pagina_html() -> str:
             f'<header><h1>📊 Controle de Due Diligences</h1>'
             f'<span><a href="/">← Voltar ao sistema</a> &nbsp;&nbsp; '
             f'<a href="/controle.xlsx" class="btn">⬇️ Exportar Excel</a></span></header>'
-            f'<main><div class="resumo">{pills}</div>{corpo}</main></body></html>')
+            f'<main><div class="resumo">{pills}</div>{corpo}</main>{modal}{script}</body></html>')
 
 
 def exportar_xlsx() -> str:
