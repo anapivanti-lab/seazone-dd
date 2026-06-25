@@ -65,6 +65,7 @@ TJ = {
     "MS": "https://esaj.tjms.jus.br/sco/abrirCadastro.do",
     "GO": "https://projudi.tjgo.jus.br/CertidaoNegativaPositivaPublica?PaginaAtual=1&TipoArea=2&InteressePessoal=S",
     "DF": "https://cnc.tjdft.jus.br/solicitacao-externa",
+    "ES": "https://sistemas.tjes.jus.br/certidaonegativa/sistemas/certidao/CERTIDAOPESQUISA.cfm",
 }
 
 # --- Justiça Federal, por região (a certidão cobre toda a região do TRF) ---
@@ -91,6 +92,7 @@ MUNICIPAL = {
         "PF": "https://www2.sefaz.salvador.ba.gov.br/servico/certidao-regularidade-fiscal-pf",
     },
     "mata de sao joao": "https://matadesaojoao.atendimento.admsistemas.app.br/emitir-certidao?tipoCertidao=1",
+    "vitoria": "https://tributario.vitoria.es.gov.br/Servicos/CertidaoNegativa/CertidaoNegativa.aspx",
 }
 
 _GRAUS = ["Cível 1º grau", "Cível 2º grau", "Criminal 1º grau", "Criminal 2º grau"]
