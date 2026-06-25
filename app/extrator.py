@@ -186,10 +186,14 @@ def extrair_cartao_cnpj(caminho: str) -> dict:
 
 
 def _limpar_nome(s: str) -> str:
-    """Remove ruído de OCR no começo do nome (tokens curtos/minúsculos/com número)."""
+    """Remove ruído de OCR no começo do nome (tokens curtos/minúsculos/com número)
+    e no fim (datas/números colados, ex.: a data da 1ª habilitação na CNH-e que vem
+    grudada no nome do titular: 'FULANO DE TAL 23/09/2014')."""
     toks = (s or "").split()
     while toks and (len(toks[0]) <= 2 or toks[0].islower() or any(c.isdigit() for c in toks[0])):
         toks.pop(0)
+    while toks and any(c.isdigit() for c in toks[-1]):  # nome de pessoa não termina em número
+        toks.pop()
     return " ".join(toks).strip()
 
 
@@ -267,6 +271,34 @@ def _eh_nome(s: str) -> bool:
     return bool(re.search(r"[A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú]{2,}", s))
 
 
+def _nomes_filiacao(linhas) -> list[str]:
+    """Coleta os nomes da filiação (pai e mãe) de RG/CNH. Numa CNH-e o OCR às vezes
+    separa o pai (logo abaixo de 'FILIAÇÃO') da mãe (várias linhas depois, no meio do
+    ruído da leitura). Por isso varremos do rótulo 'FILIAÇÃO' até a próxima seção
+    (assinatura/observações/nacionalidade), recolhendo até 2 nomes de pessoa de
+    verdade. Ordem do cartão = pai primeiro, mãe depois."""
+    nomes: list[str] = []
+    achou_rotulo = False
+    for l in linhas:
+        if not achou_rotulo:
+            if re.search(r"filia", l, re.I):
+                achou_rotulo = True
+            continue
+        if re.search(r"assinatura|observa|documento assinado|nacionalidad", l, re.I):
+            break
+        nome = _limpar_nome(l)
+        if not _eh_nome(nome) or any(c.isdigit() for c in nome):
+            continue
+        c = _cmp(nome)
+        if any(b in c for b in _BOILER):
+            continue
+        if c not in [_cmp(n) for n in nomes]:
+            nomes.append(nome)
+        if len(nomes) >= 2:
+            break
+    return nomes
+
+
 def _achar_nome_titular(linhas, mae, pai) -> str:
     """O nome do titular = o nome de pessoa que NÃO é moldura do documento nem o
     pai/mãe. Pega o mais completo (mais palavras)."""
@@ -324,17 +356,13 @@ def extrair_identidade(caminho: str) -> dict:
     else:
         data_nascimento = ""
 
-    # Filiação (pai/mãe)
+    # Filiação (pai/mãe) — ordem do cartão: pai primeiro, mãe depois
     nome_mae = nome_pai = ""
-    for i, l in enumerate(linhas):
-        if re.search(r"filia", l, re.I):
-            cand = [x for x in linhas[i + 1:i + 6] if _eh_nome(x)]
-            if len(cand) >= 2:
-                nome_pai, nome_mae = cand[0], cand[1]
-            elif cand:
-                nome_mae = cand[0]
-            break
-    nome_mae, nome_pai = _limpar_nome(nome_mae), _limpar_nome(nome_pai)
+    fil = _nomes_filiacao(linhas)
+    if len(fil) >= 2:
+        nome_pai, nome_mae = fil[0], fil[1]
+    elif fil:
+        nome_mae = fil[0]
 
     # Nome do titular: tenta o rótulo "NOME"; senão, o nome que não é pai/mãe/moldura
     nome = ""
@@ -408,21 +436,18 @@ def _extrair_pf_do_texto(texto: str, caminho: str) -> dict:
     else:
         data_nascimento = ""
 
+    # Filiação (pai/mãe) — ordem do cartão: pai primeiro, mãe depois
     nome_mae = nome_pai = ""
-    for i, l in enumerate(linhas):
-        if re.search(r"filia", l, re.I):
-            cand = [x for x in linhas[i + 1:i + 6] if _eh_nome(x)]
-            if len(cand) >= 2:
-                nome_pai, nome_mae = cand[0], cand[1]
-            elif cand:
-                nome_mae = cand[0]
-            break
+    fil = _nomes_filiacao(linhas)
+    if len(fil) >= 2:
+        nome_pai, nome_mae = fil[0], fil[1]
+    elif fil:
+        nome_mae = fil[0]
     # Fallback: "Nome da Mãe: FULANA"
     if not nome_mae:
         m2 = re.search(r"m[aã]e[:\s]+([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú ]{4,})", texto, re.I)
         if m2:
-            nome_mae = m2.group(1).strip()
-    nome_mae, nome_pai = _limpar_nome(nome_mae), _limpar_nome(nome_pai)
+            nome_mae = _limpar_nome(m2.group(1).strip())
 
     nome = ""
     for i, l in enumerate(linhas):
