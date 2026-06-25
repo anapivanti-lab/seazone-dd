@@ -51,6 +51,7 @@ SEFAZ = {
     "MS": "https://servicos.efazenda.ms.gov.br/pndfis/home/emissao",
     "GO": "https://www.sefaz.go.gov.br/Certidao/Emissao/default.asp",
     "RJ": "https://www.consultadividaativa.rj.gov.br/RDGWEBLNX/servlet/StartCISPage?PAGEURL=/cisnatural/NatLogon.html&xciParameters.natsession=Solicitar_Certidao",
+    "ES": "https://sefaz.es.gov.br/emissao-de-certidoes",
 }
 
 # --- Justiça Estadual (Tribunal de Justiça), por UF ---
